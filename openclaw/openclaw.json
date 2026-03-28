@@ -1,0 +1,228 @@
+{
+  "models": {
+    "providers": {
+      "openai": {
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKey": "REDACTED_OPENAI_KEY",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "gpt-4o",
+            "name": "GPT-4o",
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 2.5,
+              "output": 10,
+              "cacheRead": 1.25,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "gpt-4o-mini",
+            "name": "GPT-4o Mini",
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0.15,
+              "output": 0.6,
+              "cacheRead": 0.075,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      },
+      "anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "REDACTED_ANTHROPIC_KEY",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "name": "Claude Haiku 4.5",
+            "contextWindow": 200000,
+            "maxTokens": 8192,
+            "cost": {
+              "input": 0.8,
+              "output": 4,
+              "cacheRead": 0.08,
+              "cacheWrite": 1
+            }
+          }
+        ]
+      },
+      "ollama": {
+        "baseUrl": "https://ollama.example.net",
+        "apiKey": "ollama-local",
+        "api": "ollama",
+        "models": [
+          {
+            "id": "qwen3-coder:latest",
+            "name": "Qwen3 Coder",
+            "contextWindow": 16384,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "devstral-small-2:latest",
+            "name": "Devstral Small 2",
+            "contextWindow": 16384,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "qwen3:30b-a3b",
+            "name": "Qwen3 30B-A3B MoE",
+            "contextWindow": 16384,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai/gpt-4o"
+      },
+      "memorySearch": {
+        "enabled": true,
+        "provider": "ollama",
+        "model": "nomic-embed-text",
+        "remote": {
+          "baseUrl": "https://ollama.example.net",
+          "apiKey": "ollama-local"
+        }
+      },
+      "sandbox": {
+        "mode": "off"
+      },
+      "elevatedDefault": "full",
+      "compaction": {
+        "mode": "default",
+        "memoryFlush": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "messages": {
+    "groupChat": {
+      "historyLimit": 5
+    }
+  },
+  "commands": {
+    "native": true,
+    "nativeSkills": true,
+    "restart": true,
+    "ownerDisplay": "raw",
+    "bash": false
+  },
+  "channels": {
+    "matrix": {
+      "enabled": true,
+      "homeserver": "https://matrix.example.net",
+      "accessToken": "REDACTED_OC_TOKEN",
+      "encryption": false,
+      "dm": {
+        "policy": "allowlist",
+        "allowFrom": [
+          "@dominicus:matrix.example.net"
+        ]
+      },
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": [
+        "@dominicus:matrix.example.net",
+        "@nl-librenms:matrix.example.net",
+        "@gr-librenms:matrix.example.net",
+        "@claude:matrix.example.net"
+      ],
+      "groups": {
+        "!PVkZvHgyrtBVEbgpRt:matrix.example.net": {
+          "allow": true,
+          "requireMention": true
+        },
+        "!iXTnQsFJahUquYPDdG:matrix.example.net": {
+          "allow": true,
+          "requireMention": true
+        },
+        "!miZJJDwFQZDkuMcBqL:matrix.example.net": {
+          "allow": true,
+          "requireMention": true
+        },
+        "!xeNxtpScJWCmaFjeCL:matrix.example.net": {
+          "allow": true,
+          "requireMention": true
+        },
+        "!AOMuEtXGyzGFLgObKN:matrix.example.net": {
+          "allow": true,
+          "requireMention": true
+        },
+        "!NKosBPujbWMevzHaaM:matrix.example.net": {
+          "allow": true,
+          "requireMention": true
+        }
+      },
+      "tools": {
+        "exec": {
+          "ask": "off",
+          "security": "full"
+        }
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "https://openclaw.example.net"
+      ],
+      "dangerouslyAllowHostHeaderOriginFallback": false
+    },
+    "trustedProxies": [
+      "10.0.181.X"
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "matrix": {
+        "enabled": true
+      }
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.3.3",
+    "lastTouchedAt": "2026-03-05T02:40:08.447Z"
+  },
+  "tools": {
+    "exec": {
+      "host": "gateway",
+      "security": "full",
+      "ask": "off"
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "matrix": [
+          "*"
+        ]
+      }
+    }
+  }
+}

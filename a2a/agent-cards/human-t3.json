@@ -1,0 +1,35 @@
+{
+  "agent": "human",
+  "tier": 3,
+  "model": null,
+  "version": "2026.3.24",
+  "operators": ["@dominicus:matrix.example.net"],
+  "capabilities": [
+    {
+      "name": "plan-approval",
+      "description": "Approve or reject remediation plans via Matrix reactions or poll votes",
+      "inputFormat": ["poll-msc3381", "reaction-thumbs", "text-reply"],
+      "responseTime": "1min-30min"
+    },
+    {
+      "name": "override",
+      "description": "Override agent decisions, force-escalate, cancel sessions",
+      "commands": ["!session pause/resume/done/cancel", "!issue done/verify"]
+    },
+    {
+      "name": "context-injection",
+      "description": "Provide domain knowledge agents lack (maintenance windows, business context)",
+      "inputFormat": "text-reply"
+    }
+  ],
+  "routing": {
+    "acceptsFrom": ["claude-code-t2", "openclaw-t1"],
+    "escalateTo": null
+  },
+  "approvalPolicy": {
+    "timeoutReminder": 900,
+    "timeoutPause": 1800,
+    "autoApproveThreshold": null,
+    "authorizedSenders": ["@dominicus:matrix.example.net"]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "socket": {
+    "path": "~/.openclaw/exec-approvals.sock",
+    "token": "REDACTED_6a78b16b"
+  },
+  "defaults": {
+    "security": "full",
+    "ask": "off",
+    "askFallback": "full",
+    "autoAllowSkills": true
+  },
+  "agents": {
+    "main": {
+      "security": "full",
+      "ask": "off",
+      "askFallback": "full",
+      "autoAllowSkills": true,
+      "allowlist": [
+        {
+          "pattern": "*",
+          "id": "7547e5f3-a4bd-4d29-88ac-0a0ae1ea6947",
+          "lastUsedAt": VMID_REDACTED8511,
+          "lastUsedCommand": "status"
+        }
+      ]
+    }
+  }
+}

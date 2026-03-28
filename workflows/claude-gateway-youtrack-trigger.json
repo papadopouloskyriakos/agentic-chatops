@@ -1,0 +1,214 @@
+{
+  "id": "Piy9H9dHhEKHBBnu",
+  "name": "NL - Claude Gateway YouTrack Trigger",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "YouTrack Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "youtrack-claude-trigger",
+        "options": {}
+      },
+      "webhookId": "youtrack-claude-trigger"
+    },
+    {
+      "id": "check-cooldown",
+      "name": "Check Cooldown",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [260, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "if [ -f /tmp/claude-session-cooldown ] && [ $(( $(date +%s) - $(stat -c %Y /tmp/claude-session-cooldown) )) -lt 120 ]; then echo COOLDOWN; else rm -f /tmp/claude-session-cooldown && echo OK; fi",
+        "cwd": "/tmp"
+      },
+      "credentials": {
+        "sshPrivateKey": {"id": "REDACTED_SSH_CRED", "name": "nl-claude01 - SSH claude-runner"}
+      }
+    },
+    {
+      "id": "is-cooldown",
+      "name": "Is Cooldown?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [480, 0],
+      "parameters": {
+        "conditions": {
+          "options": {"version": 2, "leftValue": "", "caseSensitive": true, "typeValidation": "strict"},
+          "combinator": "and",
+          "conditions": [{"id": "cond-cooldown", "operator": {"type": "string", "operation": "equals"}, "leftValue": "={{ $json.stdout.trim() }}", "rightValue": "COOLDOWN"}]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "extract-issue",
+      "name": "Extract Issue Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 100],
+      "parameters": {
+        "jsCode": "const body = $('YouTrack Webhook').first().json.body || $('YouTrack Webhook').first().json;\n\nconst issueId = body.issueId || body.id || body.issue?.id || '';\nconst summary = body.summary || body.issue?.summary || '';\nconst description = body.description || body.issue?.description || '';\n\nconst isValid = !!(issueId && (summary || description));\n\nconst prompt = 'You are working on YouTrack issue ' + issueId + ': ' + summary + '\\n\\n' + description + '\\n\\nProject is at /home/claude-runner/gitlab/products/cubeos';\nconst base64Prompt = Buffer.from(prompt).toString('base64');\n\nreturn [{ json: { issueId, summary, description, base64Prompt, isValid } }];"
+      }
+    },
+    {
+      "id": "is-valid-issue",
+      "name": "Is Valid Issue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [920, 100],
+      "parameters": {
+        "conditions": {
+          "options": {"version": 2, "leftValue": "", "caseSensitive": true, "typeValidation": "strict"},
+          "combinator": "and",
+          "conditions": [{"id": "cond-valid", "operator": {"type": "boolean", "operation": "true", "singleValue": true}, "leftValue": "={{ $json.isValid }}", "rightValue": ""}]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-invalid-warning",
+      "name": "Post Invalid Warning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 250],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!AxiIWiJWjnpqgUmfGn:matrix.example.net/send/m.room.message/invalid-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'YouTrack webhook received but issue data is incomplete (issueId: ' + JSON.stringify($json.issueId) + ', summary: ' + JSON.stringify($json.summary) + '). Skipping Claude session.' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {"id": "REDACTED_MATRIX_CRED", "name": "Matrix Claude Bot"}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "continueOnFail": true
+    },
+    {
+      "id": "run-claude",
+      "name": "Run Claude",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [1140, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "={{ \"unset CLAUDECODE && claude -p \\\"$(printf '%s' '\" + $json.base64Prompt + \"' | base64 -d)\\\" --output-format json --dangerously-skip-permissions\" }}",
+        "cwd": "/home/claude-runner/gitlab/products/cubeos"
+      },
+      "credentials": {
+        "sshPrivateKey": {"id": "REDACTED_SSH_CRED", "name": "nl-claude01 - SSH claude-runner"}
+      }
+    },
+    {
+      "id": "parse-response",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 0],
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst stderr = $input.first().json.stderr || '';\nconst issueId = $('Extract Issue Data').first().json.issueId;\n\nconst output = stdout.trim() || stderr.trim();\n\nlet result, sessionId;\ntry {\n  const parsed = JSON.parse(output);\n  result = parsed.result || '';\n  sessionId = parsed.session_id || '';\n} catch (e) {\n  result = output ? 'Error: ' + output.substring(0, 1000) : 'No response from Claude (empty stdout and stderr)';\n  sessionId = '';\n}\n\nconst hasValidSession = !!(sessionId && issueId);\n\nreturn [{ json: { result, sessionId, issueId, hasValidSession } }];"
+      }
+    },
+    {
+      "id": "has-valid-session",
+      "name": "Has Valid Session?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1620, 0],
+      "parameters": {
+        "conditions": {
+          "options": {"version": 2, "leftValue": "", "caseSensitive": true, "typeValidation": "strict"},
+          "combinator": "and",
+          "conditions": [{"id": "cond-valid-session", "operator": {"type": "boolean", "operation": "true", "singleValue": true}, "leftValue": "={{ $json.hasValidSession }}", "rightValue": ""}]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "write-session",
+      "name": "Write Session File",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [1840, -50],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "={{ \"printf '%s' '{\\\"sessionId\\\":\\\"\" + $json.sessionId + \"\\\",\\\"issueId\\\":\\\"\" + $json.issueId + \"\\\"}' > /tmp/claude-gateway-session.json\" }}",
+        "cwd": "/tmp"
+      },
+      "credentials": {
+        "sshPrivateKey": {"id": "REDACTED_SSH_CRED", "name": "nl-claude01 - SSH claude-runner"}
+      }
+    },
+    {
+      "id": "post-matrix",
+      "name": "Post to Matrix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2060, 0],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!AxiIWiJWjnpqgUmfGn:matrix.example.net/send/m.room.message/yt-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: '[' + $('Parse Response').first().json.issueId + '] Claude:\\n\\n' + ($('Parse Response').first().json.result || 'No response').substring(0, 4000) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {"id": "REDACTED_MATRIX_CRED", "name": "Matrix Claude Bot"}
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 30000,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "YouTrack Webhook": {
+      "main": [[{"node": "Check Cooldown", "type": "main", "index": 0}]]
+    },
+    "Check Cooldown": {
+      "main": [[{"node": "Is Cooldown?", "type": "main", "index": 0}]]
+    },
+    "Is Cooldown?": {
+      "main": [[], [{"node": "Extract Issue Data", "type": "main", "index": 0}]]
+    },
+    "Extract Issue Data": {
+      "main": [[{"node": "Is Valid Issue?", "type": "main", "index": 0}]]
+    },
+    "Is Valid Issue?": {
+      "main": [[{"node": "Run Claude", "type": "main", "index": 0}], [{"node": "Post Invalid Warning", "type": "main", "index": 0}]]
+    },
+    "Run Claude": {
+      "main": [[{"node": "Parse Response", "type": "main", "index": 0}]]
+    },
+    "Parse Response": {
+      "main": [[{"node": "Has Valid Session?", "type": "main", "index": 0}]]
+    },
+    "Has Valid Session?": {
+      "main": [[{"node": "Write Session File", "type": "main", "index": 0}], [{"node": "Post to Matrix", "type": "main", "index": 0}]]
+    },
+    "Write Session File": {
+      "main": [[{"node": "Post to Matrix", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  }
+}

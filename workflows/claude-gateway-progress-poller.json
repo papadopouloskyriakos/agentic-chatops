@@ -1,0 +1,715 @@
+{
+  "id": "uRRkYbRfWuPXrv3b",
+  "name": "NL - Claude Gateway Progress Poller",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "poller-trigger",
+      "name": "Poller Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "poll-progress",
+      "name": "Poll Progress",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "=LOG=\"/tmp/claude-run-{{ $('Normalize Input').first().json.issueId }}.jsonl\"\nOFFSET_FILE=\"${LOG}.offset\"\nPIDFILE=\"/tmp/claude-pid-{{ $('Normalize Input').first().json.issueId }}\"\n# Read PID from file each iteration (inject may change it)\nif [ -f \"$PIDFILE\" ]; then\n  PID=$(cat \"$PIDFILE\" | tr -d '\\n')\nelse\n  PID={{ $('Normalize Input').first().json.pid }}\nfi\nOFFSET=$(cat \"$OFFSET_FILE\" 2>/dev/null || echo 0)\nTOTAL=$(wc -l < \"$LOG\" 2>/dev/null || echo 0)\nNEW_LINES=\"\"\nif [ \"$TOTAL\" -gt \"$OFFSET\" ]; then\n  NEW_LINES=$(tail -n +$((OFFSET + 1)) \"$LOG\" | head -n 200)\n  echo \"$TOTAL\" > \"$OFFSET_FILE\"\nfi\nif kill -0 $PID 2>/dev/null; then\n  ALIVE=true\nelif [ -f \"$PIDFILE\" ]; then\n  # PID dead but PID file exists \u2014 inject may be restarting Claude\n  ALIVE=grace\nelse\n  ALIVE=false\nfi\necho \"ALIVE:$ALIVE\"\necho \"OFFSET:$TOTAL\"\necho \"LINES_START\"\necho \"$NEW_LINES\"\necho \"LINES_END\"",
+        "cwd": "/tmp"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH claude-runner"
+        }
+      }
+    },
+    {
+      "id": "format-progress",
+      "name": "Format Progress",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const stdout = $('Poll Progress').first().json.stdout || '';\nconst trigger = $('Normalize Input').first().json;\nconst issueId = trigger.issueId || 'unknown';\nconst targetRoom = trigger.targetRoom || '!PVkZvHgyrtBVEbgpRt:matrix.example.net';\nconst startTime = trigger.startTime || Date.now();\n\nconst aliveMatch = stdout.match(/ALIVE:(true|false|grace)/);\nconst aliveVal = aliveMatch ? aliveMatch[1] : 'false';\nconst shouldContinue = aliveVal === 'true' || aliveVal === 'grace';\n\nconst linesMatch = stdout.match(/LINES_START\\n([\\s\\S]*?)\\nLINES_END/);\nconst rawLines = linesMatch ? linesMatch[1].trim() : '';\n\n// Strip common prefixes from bash commands to show the meaningful part\nfunction cleanBashCmd(cmd) {\n  let c = cmd;\n  c = c.replace(/^source\\s+\\S+\\.env\\s*&&\\s*/g, '');\n  c = c.replace(/^\\. \\S+\\.env\\s*&&\\s*/g, '');\n  c = c.replace(/^cd\\s+\\S+\\s*&&\\s*/g, '');\n  c = c.replace(/^PATH=\\S+\\s+/g, '');\n  c = c.replace(/^export\\s+\\S+\\s*&&\\s*/g, '');\n  c = c.replace(/^export\\s+\\S+\\s+\\S+\\s*&&\\s*/g, '');\n  c = c.replace(/\\/home\\/claude-runner\\/gitlab\\/products\\/cubeos\\//g, '');\n  c = c.replace(/\\/home\\/claude-runner\\/gitlab\\/infrastructure\\/nl\\/production\\//g, 'iac/');\n  c = c.replace(/\\/home\\/claude-runner\\/gitlab\\//g, '~/');\n  c = c.replace(/\\/home\\/claude-runner\\//g, '~/');\n  return c.substring(0, 80);\n}\n\nfunction shortPath(p) {\n  return p.replace(/\\/home\\/claude-runner\\/gitlab\\/products\\/cubeos\\//g, '')\n          .replace(/\\/home\\/claude-runner\\/gitlab\\/infrastructure\\/nl\\/production\\//g, 'iac/')\n          .replace(/\\/home\\/claude-runner\\/gitlab\\//g, '~/')\n          .replace(/\\/home\\/claude-runner\\//g, '~/');\n}\n\nconst tools = [];\nif (rawLines) {\n  for (const line of rawLines.split('\\n')) {\n    if (!line.trim()) continue;\n    try {\n      const obj = JSON.parse(line.trim());\n      if (obj.type === 'assistant' && obj.message && obj.message.content) {\n        for (const c of obj.message.content) {\n          if (c.type === 'tool_use') {\n            const name = c.name || '?';\n            const inp = c.input || {};\n            let detail = '';\n            if (name === 'Bash' && inp.command) {\n              detail = cleanBashCmd(inp.command);\n            } else if (inp.pattern) {\n              detail = shortPath(inp.pattern);\n            } else if (inp.file_path) {\n              detail = shortPath(inp.file_path).split('/').pop();\n            } else if (inp.query) {\n              detail = inp.query.substring(0, 60);\n            } else if (inp.command) {\n              detail = cleanBashCmd(inp.command);\n            }\n            tools.push(name + (detail ? ': ' + detail : ''));\n          }\n        }\n      }\n    } catch (e) { /* skip non-JSON lines */ }\n  }\n}\n\n// Deduplicate consecutive identical tool lines\nconst deduped = [];\nfor (const t of tools) {\n  if (deduped.length === 0 || deduped[deduped.length - 1].text !== t) {\n    deduped.push({ text: t, count: 1 });\n  } else {\n    deduped[deduped.length - 1].count++;\n  }\n}\n\nconst elapsed = Math.floor((Date.now() - startTime) / 1000);\nconst mins = Math.floor(elapsed / 60);\nconst secs = elapsed % 60;\nconst recentDeduped = deduped.slice(-6);\n\n// Timestamp in HH:MM CET\nconst now = new Date();\nconst ts = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' });\n\nlet shouldPost = recentDeduped.length > 0;\nlet body = '';\nlet htmlBody = '';\nif (shouldPost) {\n  const toolLines = recentDeduped.map(d => '  ' + d.text + (d.count > 1 ? ' (x' + d.count + ')' : '')).join('\\n');\n  body = ts + ' [' + issueId + '] Working... (' + mins + 'm' + secs + 's)\\n' + toolLines;\n  const htmlTools = recentDeduped.map(d => {\n    const escaped = (d.text + (d.count > 1 ? ' <i>(x' + d.count + ')</i>' : '')).replace(/</g,'&lt;').replace(/>/g,'&gt;');\n    return '&nbsp;&nbsp;' + escaped.replace('&lt;i&gt;', '<i>').replace('&lt;/i&gt;', '</i>');\n  }).join('<br/>');\n  htmlBody = '<code>' + ts + '</code> <b>[' + issueId + ']</b> Working... (' + mins + 'm' + secs + 's)<br/>' + htmlTools;\n}\n\nreturn [{ json: { shouldPost, shouldContinue, targetRoom, body, htmlBody } }];"
+      }
+    },
+    {
+      "id": "should-post",
+      "name": "Should Post?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-post",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.shouldPost }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-progress",
+      "name": "Post Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        -100
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ $('Format Progress').first().json.targetRoom }}/send/m.room.message/progress-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: $('Format Progress').first().json.body, format: 'org.matrix.custom.html', formatted_body: $('Format Progress').first().json.htmlBody }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      }
+    },
+    {
+      "id": "should-continue",
+      "name": "Should Continue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-continue",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Format Progress').first().json.shouldContinue }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wait-30s",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        -100
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 30,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "progress-poller",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "webhookId": "progress-poller"
+    },
+    {
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        200
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      }
+    },
+    {
+      "id": "normalize-input",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        130,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Works for both webhook (data in .body) and execute-workflow trigger (data at root)\nconst d = $input.first().json;\nconst src = d.body && d.body.pid ? d.body : d;\nreturn [{ json: { pid: src.pid || 0, logFile: src.logFile || '', issueId: src.issueId || 'unknown', targetRoom: src.targetRoom || '!PVkZvHgyrtBVEbgpRt:matrix.example.net', startTime: src.startTime || Date.now() } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Poll Progress": {
+      "main": [
+        [
+          {
+            "node": "Format Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Progress": {
+      "main": [
+        [
+          {
+            "node": "Should Post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Post?": {
+      "main": [
+        [
+          {
+            "node": "Post Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Should Continue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Progress": {
+      "main": [
+        [
+          {
+            "node": "Should Continue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Continue?": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "Poll Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond OK": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poller Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Poll Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "any",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "42e47377-850d-41d1-9c06-c4f0d11c6edf",
+  "activeVersionId": "42e47377-850d-41d1-9c06-c4f0d11c6edf",
+  "versionCounter": 80,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-12T11:55:34.625Z",
+      "createdAt": "2026-03-12T11:55:34.625Z",
+      "role": "workflow:owner",
+      "workflowId": "uRRkYbRfWuPXrv3b",
+      "projectId": "CLDM2Ezgw9101HuF",
+      "project": {
+        "updatedAt": "2025-01-28T17:38:17.181Z",
+        "createdAt": "2025-01-28T17:31:03.531Z",
+        "id": "CLDM2Ezgw9101HuF",
+        "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-03-14T13:34:14.879Z",
+    "createdAt": "2026-03-14T13:34:14.879Z",
+    "versionId": "42e47377-850d-41d1-9c06-c4f0d11c6edf",
+    "workflowId": "uRRkYbRfWuPXrv3b",
+    "nodes": [
+      {
+        "id": "poller-trigger",
+        "name": "Poller Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "poll-progress",
+        "name": "Poll Progress",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          260,
+          0
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "authentication": "privateKey",
+          "command": "=LOG=\"/tmp/claude-run-{{ $('Normalize Input').first().json.issueId }}.jsonl\"\nOFFSET_FILE=\"${LOG}.offset\"\nPIDFILE=\"/tmp/claude-pid-{{ $('Normalize Input').first().json.issueId }}\"\n# Read PID from file each iteration (inject may change it)\nif [ -f \"$PIDFILE\" ]; then\n  PID=$(cat \"$PIDFILE\" | tr -d '\\n')\nelse\n  PID={{ $('Normalize Input').first().json.pid }}\nfi\nOFFSET=$(cat \"$OFFSET_FILE\" 2>/dev/null || echo 0)\nTOTAL=$(wc -l < \"$LOG\" 2>/dev/null || echo 0)\nNEW_LINES=\"\"\nif [ \"$TOTAL\" -gt \"$OFFSET\" ]; then\n  NEW_LINES=$(tail -n +$((OFFSET + 1)) \"$LOG\" | head -n 200)\n  echo \"$TOTAL\" > \"$OFFSET_FILE\"\nfi\nif kill -0 $PID 2>/dev/null; then\n  ALIVE=true\nelif [ -f \"$PIDFILE\" ]; then\n  # PID dead but PID file exists \u2014 inject may be restarting Claude\n  ALIVE=grace\nelse\n  ALIVE=false\nfi\necho \"ALIVE:$ALIVE\"\necho \"OFFSET:$TOTAL\"\necho \"LINES_START\"\necho \"$NEW_LINES\"\necho \"LINES_END\"",
+          "cwd": "/tmp"
+        },
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH claude-runner"
+          }
+        }
+      },
+      {
+        "id": "format-progress",
+        "name": "Format Progress",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const stdout = $('Poll Progress').first().json.stdout || '';\nconst trigger = $('Normalize Input').first().json;\nconst issueId = trigger.issueId || 'unknown';\nconst targetRoom = trigger.targetRoom || '!PVkZvHgyrtBVEbgpRt:matrix.example.net';\nconst startTime = trigger.startTime || Date.now();\n\nconst aliveMatch = stdout.match(/ALIVE:(true|false|grace)/);\nconst aliveVal = aliveMatch ? aliveMatch[1] : 'false';\nconst shouldContinue = aliveVal === 'true' || aliveVal === 'grace';\n\nconst linesMatch = stdout.match(/LINES_START\\n([\\s\\S]*?)\\nLINES_END/);\nconst rawLines = linesMatch ? linesMatch[1].trim() : '';\n\n// Strip common prefixes from bash commands to show the meaningful part\nfunction cleanBashCmd(cmd) {\n  let c = cmd;\n  c = c.replace(/^source\\s+\\S+\\.env\\s*&&\\s*/g, '');\n  c = c.replace(/^\\. \\S+\\.env\\s*&&\\s*/g, '');\n  c = c.replace(/^cd\\s+\\S+\\s*&&\\s*/g, '');\n  c = c.replace(/^PATH=\\S+\\s+/g, '');\n  c = c.replace(/^export\\s+\\S+\\s*&&\\s*/g, '');\n  c = c.replace(/^export\\s+\\S+\\s+\\S+\\s*&&\\s*/g, '');\n  c = c.replace(/\\/home\\/claude-runner\\/gitlab\\/products\\/cubeos\\//g, '');\n  c = c.replace(/\\/home\\/claude-runner\\/gitlab\\/infrastructure\\/nl\\/production\\//g, 'iac/');\n  c = c.replace(/\\/home\\/claude-runner\\/gitlab\\//g, '~/');\n  c = c.replace(/\\/home\\/claude-runner\\//g, '~/');\n  return c.substring(0, 80);\n}\n\nfunction shortPath(p) {\n  return p.replace(/\\/home\\/claude-runner\\/gitlab\\/products\\/cubeos\\//g, '')\n          .replace(/\\/home\\/claude-runner\\/gitlab\\/infrastructure\\/nl\\/production\\//g, 'iac/')\n          .replace(/\\/home\\/claude-runner\\/gitlab\\//g, '~/')\n          .replace(/\\/home\\/claude-runner\\//g, '~/');\n}\n\nconst tools = [];\nif (rawLines) {\n  for (const line of rawLines.split('\\n')) {\n    if (!line.trim()) continue;\n    try {\n      const obj = JSON.parse(line.trim());\n      if (obj.type === 'assistant' && obj.message && obj.message.content) {\n        for (const c of obj.message.content) {\n          if (c.type === 'tool_use') {\n            const name = c.name || '?';\n            const inp = c.input || {};\n            let detail = '';\n            if (name === 'Bash' && inp.command) {\n              detail = cleanBashCmd(inp.command);\n            } else if (inp.pattern) {\n              detail = shortPath(inp.pattern);\n            } else if (inp.file_path) {\n              detail = shortPath(inp.file_path).split('/').pop();\n            } else if (inp.query) {\n              detail = inp.query.substring(0, 60);\n            } else if (inp.command) {\n              detail = cleanBashCmd(inp.command);\n            }\n            tools.push(name + (detail ? ': ' + detail : ''));\n          }\n        }\n      }\n    } catch (e) { /* skip non-JSON lines */ }\n  }\n}\n\n// Deduplicate consecutive identical tool lines\nconst deduped = [];\nfor (const t of tools) {\n  if (deduped.length === 0 || deduped[deduped.length - 1].text !== t) {\n    deduped.push({ text: t, count: 1 });\n  } else {\n    deduped[deduped.length - 1].count++;\n  }\n}\n\nconst elapsed = Math.floor((Date.now() - startTime) / 1000);\nconst mins = Math.floor(elapsed / 60);\nconst secs = elapsed % 60;\nconst recentDeduped = deduped.slice(-6);\n\n// Timestamp in HH:MM CET\nconst now = new Date();\nconst ts = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' });\n\nlet shouldPost = recentDeduped.length > 0;\nlet body = '';\nlet htmlBody = '';\nif (shouldPost) {\n  const toolLines = recentDeduped.map(d => '  ' + d.text + (d.count > 1 ? ' (x' + d.count + ')' : '')).join('\\n');\n  body = ts + ' [' + issueId + '] Working... (' + mins + 'm' + secs + 's)\\n' + toolLines;\n  const htmlTools = recentDeduped.map(d => {\n    const escaped = (d.text + (d.count > 1 ? ' <i>(x' + d.count + ')</i>' : '')).replace(/</g,'&lt;').replace(/>/g,'&gt;');\n    return '&nbsp;&nbsp;' + escaped.replace('&lt;i&gt;', '<i>').replace('&lt;/i&gt;', '</i>');\n  }).join('<br/>');\n  htmlBody = '<code>' + ts + '</code> <b>[' + issueId + ']</b> Working... (' + mins + 'm' + secs + 's)<br/>' + htmlTools;\n}\n\nreturn [{ json: { shouldPost, shouldContinue, targetRoom, body, htmlBody } }];"
+        }
+      },
+      {
+        "id": "should-post",
+        "name": "Should Post?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond-post",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $json.shouldPost }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-progress",
+        "name": "Post Progress",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1040,
+          -100
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ $('Format Progress').first().json.targetRoom }}/send/m.room.message/progress-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: $('Format Progress').first().json.body, format: 'org.matrix.custom.html', formatted_body: $('Format Progress').first().json.htmlBody }) }}",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        }
+      },
+      {
+        "id": "should-continue",
+        "name": "Should Continue?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1300,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond-continue",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Format Progress').first().json.shouldContinue }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "wait-30s",
+        "name": "Wait 30s",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1560,
+          -100
+        ],
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 30,
+          "unit": "seconds"
+        }
+      },
+      {
+        "id": "webhook-trigger",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          200
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "progress-poller",
+          "options": {},
+          "responseMode": "responseNode"
+        },
+        "webhookId": "progress-poller"
+      },
+      {
+        "id": "respond-ok",
+        "name": "Respond OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          260,
+          200
+        ],
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "OK"
+        }
+      },
+      {
+        "id": "normalize-input",
+        "name": "Normalize Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          130,
+          100
+        ],
+        "parameters": {
+          "jsCode": "// Works for both webhook (data in .body) and execute-workflow trigger (data at root)\nconst d = $input.first().json;\nconst src = d.body && d.body.pid ? d.body : d;\nreturn [{ json: { pid: src.pid || 0, logFile: src.logFile || '', issueId: src.issueId || 'unknown', targetRoom: src.targetRoom || '!PVkZvHgyrtBVEbgpRt:matrix.example.net', startTime: src.startTime || Date.now() } }];"
+        }
+      }
+    ],
+    "connections": {
+      "Poll Progress": {
+        "main": [
+          [
+            {
+              "node": "Format Progress",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format Progress": {
+        "main": [
+          [
+            {
+              "node": "Should Post?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Post?": {
+        "main": [
+          [
+            {
+              "node": "Post Progress",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Should Continue?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Progress": {
+        "main": [
+          [
+            {
+              "node": "Should Continue?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Continue?": {
+        "main": [
+          [
+            {
+              "node": "Wait 30s",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Wait 30s": {
+        "main": [
+          [
+            {
+              "node": "Poll Progress",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Respond OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond OK": {
+        "main": [
+          [
+            {
+              "node": "Normalize Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Poller Trigger": {
+        "main": [
+          [
+            {
+              "node": "Normalize Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Input": {
+        "main": [
+          [
+            {
+              "node": "Poll Progress",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Redrick Schuhart",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-03-14T13:34:15.001Z",
+        "id": 556,
+        "workflowId": "uRRkYbRfWuPXrv3b",
+        "versionId": "42e47377-850d-41d1-9c06-c4f0d11c6edf",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-03-14T13:34:14.958Z",
+        "id": 555,
+        "workflowId": "uRRkYbRfWuPXrv3b",
+        "versionId": "42e47377-850d-41d1-9c06-c4f0d11c6edf",
+        "event": "deactivated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    ]
+  }
+}

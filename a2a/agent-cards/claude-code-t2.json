@@ -1,0 +1,73 @@
+{
+  "agent": "claude-code",
+  "tier": 2,
+  "model": "claude-opus-4-6",
+  "version": "2026.3.24",
+  "host": "nl-claude01",
+  "capabilities": [
+    {
+      "name": "infra-remediation",
+      "description": "Deep infrastructure analysis, root cause diagnosis, remediation with human approval",
+      "inputSchema": {
+        "type": "object",
+        "required": ["issueId"],
+        "properties": {
+          "issueId": { "type": "string" },
+          "triageFindings": { "type": "string" },
+          "hostname": { "type": "string" },
+          "alertRule": { "type": "string" }
+        }
+      },
+      "constraints": ["requires-human-approval", "react-reasoning-mandatory"],
+      "outputFormat": "structured-response"
+    },
+    {
+      "name": "k8s-remediation",
+      "description": "Kubernetes issue remediation via GitOps (OpenTofu + Atlantis MR)",
+      "constraints": ["requires-human-approval", "gitops-only"]
+    },
+    {
+      "name": "code-implementation",
+      "description": "Code changes, multi-file edits, feature implementation, bug fixes",
+      "constraints": ["requires-human-approval-for-infra"]
+    },
+    {
+      "name": "maintenance-companion",
+      "description": "Planned maintenance lifecycle: alert suppression, recovery monitoring, post-reboot verification",
+      "constraints": ["direct-escalation-no-triage"]
+    },
+    {
+      "name": "correlated-burst-analysis",
+      "description": "Multi-host correlated alert analysis with master/child issue management",
+      "constraints": ["plan-mode", "tree-of-thought"]
+    }
+  ],
+  "mcpServers": [
+    "netbox", "n8n-mcp", "gitlab-mcp", "youtrack", "proxmox",
+    "codegraph", "opentofu", "tfmcp", "kubernetes"
+  ],
+  "reasoning": {
+    "framework": "ReAct",
+    "variants": ["react_v1", "react_v2"],
+    "mandatoryStructure": ["THOUGHT", "ACTION", "OBSERVATION", "SYNTHESIS", "VERIFICATION"],
+    "selfConsistencyCheck": true,
+    "stepBackPromptingOnRecurrence": true
+  },
+  "routing": {
+    "escalateTo": "human-t3",
+    "acceptsFrom": ["openclaw-t1", "alert-pipeline", "human-t3"],
+    "delegatesTo": ["openclaw-t1"]
+  },
+  "limits": {
+    "maxConcurrent": 3,
+    "slots": ["dev", "infra-nl", "infra-gr"],
+    "costPerSession": 5.0,
+    "dailyBudget": 25.0,
+    "timeout": 600
+  },
+  "guardrails": {
+    "credentialPatterns": 10,
+    "confidenceGating": { "stopThreshold": 0.5, "reviewThreshold": 0.7 },
+    "approvalRequired": ["infrastructure-changes", "k8s-mutations", "production-deploys"]
+  }
+}
