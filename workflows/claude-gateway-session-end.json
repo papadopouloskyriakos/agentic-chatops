@@ -1,0 +1,874 @@
+{
+  "updatedAt": "2026-03-25T02:15:46.997Z",
+  "createdAt": "2026-03-06T03:39:21.923Z",
+  "id": "rgRGPOZgPcFCvv84",
+  "name": "NL - Claude Gateway Session End",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Session End Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "claude-session-end",
+        "options": {}
+      },
+      "webhookId": "claude-session-end"
+    },
+    {
+      "id": "run-summary",
+      "name": "Run Claude Summary",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "={{ $json.body.sessionId ? \"unset CLAUDECODE && /home/app-user/.local/bin/claude -r \" + $json.body.sessionId + \" --output-format json --dangerously-skip-permissions \\\"Summarize what you worked on in this session in 2-3 sentences. Then on a new line starting with LESSON: write a single sentence describing what you learned that would help with similar issues in the future (a novel failure mode, an unexpected root cause, a tool that worked well, or a gotcha to avoid). If nothing novel was learned, write LESSON: none.\\\" 2>&1\" : \"echo '{\\\"result\\\": \\\"No summary available (no session ID)\\\"}'}\" }}",
+        "cwd": "/app/cubeos"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      }
+    },
+    {
+      "id": "parse-summary",
+      "name": "Parse Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const ROOM_MAP = {\n  CUBEOS: '!iXTnQsFJahUquYPDdG:matrix.example.net',\n  MESHSAT: '!miZJJDwFQZDkuMcBqL:matrix.example.net',\n  IFRNLLEI01PRD: '!AOMuEtXGyzGFLgObKN:matrix.example.net',\n  IFRGRSKG01PRD: '!NKosBPujbWMevzHaaM:matrix.example.net'\n};\nconst DEFAULT_ROOM = '!PVkZvHgyrtBVEbgpRt:matrix.example.net';\n\nconst stdout = $input.first().json.stdout || '';\nconst stderr = $input.first().json.stderr || '';\nconst webhookData = $('Session End Webhook').first().json;\nconst issueId = webhookData.body?.issueId || '';\nconst issueTitle = webhookData.body?.issueTitle || '';\nconst sessionId = webhookData.body?.sessionId || '';\n\nconst prefix = (issueId || '').split('-')[0];\nconst targetRoom = ROOM_MAP[prefix] || DEFAULT_ROOM;\n\nconst output = stdout.trim() || stderr.trim();\n\nlet summary, lesson = '';\ntry {\n  const parsed = JSON.parse(output);\n  const fullResult = parsed.result || '';\n  // Extract LESSON: line if present\n  const lessonMatch = fullResult.match(/LESSON:\\s*(.+?)(?:\\n|$)/i);\n  if (lessonMatch && lessonMatch[1].trim().toLowerCase() !== 'none') {\n    lesson = lessonMatch[1].trim();\n  }\n  // Summary is everything before LESSON:\n  const lessonIdx = fullResult.indexOf('LESSON:');\n  summary = lessonIdx > 0 ? fullResult.substring(0, lessonIdx).trim() : fullResult;\n} catch (e) {\n  summary = output ? 'Error getting summary: ' + output.substring(0, 500) : 'No summary available (session may have expired)';\n}\n\nreturn [{ json: { summary, lesson, issueId, issueTitle, sessionId, targetRoom } }];"
+      }
+    },
+    {
+      "id": "cleanup-files",
+      "name": "Clean Up Files",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "=DB=\"/app/cubeos/claude-context/gateway.db\"\nGW=\"/app/cubeos/claude-context\"\nISSUE_ID=\"{{ $(\"Parse Summary\").first().json.issueId || 'unknown' }}\"\nPREFIX=$(echo \"$ISSUE_ID\" | cut -d- -f1)\ncase \"$PREFIX\" in\n  IFRNLLEI01PRD) LOCK_FILE=\"gateway.lock.infra-nl\" ;;\n  IFRGRSKG01PRD) LOCK_FILE=\"gateway.lock.infra-gr\" ;;\n  CUBEOS) LOCK_FILE=\"gateway.lock.cubeos\" ;;\n  MESHSAT) LOCK_FILE=\"gateway.lock.meshsat\" ;;\n  *) LOCK_FILE=\"gateway.lock.dev\" ;;\nesac\n# Ensure columns exist in both tables\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN cost_usd REAL DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN num_turns INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN duration_seconds INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN confidence REAL DEFAULT -1;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN resolution_type TEXT DEFAULT 'unknown';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN alert_category TEXT DEFAULT '';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN prompt_variant TEXT DEFAULT '';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN cost_usd REAL DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN num_turns INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN duration_seconds INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN confidence REAL DEFAULT -1;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN prompt_variant TEXT DEFAULT '';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN alert_category TEXT DEFAULT '';\" 2>/dev/null\n# Determine alert_category from issue title (fallback if Runner didn't set it)\nISSUE_TITLE_LOWER=$(sqlite3 $DB \"SELECT LOWER(issue_title) FROM sessions WHERE issue_id='$ISSUE_ID';\" 2>/dev/null || echo \"\")\nALERT_CAT=$(sqlite3 $DB \"SELECT alert_category FROM sessions WHERE issue_id='$ISSUE_ID' AND alert_category != '';\" 2>/dev/null || echo \"\")\nif [ -z \"$ALERT_CAT\" ]; then\n  ALERT_CAT=\"general\"\n  case \"$ISSUE_TITLE_LOWER\" in\n    *up/down*|*unreachable*|*ping*|*down*) ALERT_CAT=\"availability\" ;;\n    *cpu*|*load*|*memory*|*oom*) ALERT_CAT=\"resource\" ;;\n    *disk*|*storage*|*iscsi*|*lun*) ALERT_CAT=\"storage\" ;;\n    *interface*|*port*|*bgp*|*network*) ALERT_CAT=\"network\" ;;\n    *cilium*|*k8s*|*pod*|*node*|*etcd*) ALERT_CAT=\"kubernetes\" ;;\n    *cert*|*ssl*|*tls*) ALERT_CAT=\"certificate\" ;;\n    *maintenance*|*reboot*|*upgrade*) ALERT_CAT=\"maintenance\" ;;\n    *correlated*|*burst*) ALERT_CAT=\"correlated\" ;;\n  esac\nfi\n# Determine resolution_type from feedback signals\nRESOLUTION_TYPE='unknown'\nFEEDBACK_SCORE=$(sqlite3 $DB \"SELECT CASE \n  WHEN SUM(CASE WHEN feedback_type='thumbs_up' THEN 1 ELSE 0 END) > 0 \n    AND SUM(CASE WHEN feedback_type='thumbs_down' THEN 1 ELSE 0 END) = 0 THEN 'approved'\n  WHEN SUM(CASE WHEN feedback_type='thumbs_down' THEN 1 ELSE 0 END) > 0 \n    AND SUM(CASE WHEN feedback_type='thumbs_up' THEN 1 ELSE 0 END) = 0 THEN 'rejected'\n  WHEN SUM(CASE WHEN feedback_type='thumbs_up' THEN 1 ELSE 0 END) > 0 \n    AND SUM(CASE WHEN feedback_type='thumbs_down' THEN 1 ELSE 0 END) > 0 THEN 'mixed'\n  ELSE 'unscored' END FROM session_feedback WHERE issue_id='$ISSUE_ID';\" 2>/dev/null)\n[ -n \"$FEEDBACK_SCORE\" ] && [ \"$FEEDBACK_SCORE\" != \"unscored\" ] && RESOLUTION_TYPE=\"$FEEDBACK_SCORE\"\n# Get prompt_variant from sessions table\nPROMPT_VARIANT=$(sqlite3 $DB \"SELECT prompt_variant FROM sessions WHERE issue_id='$ISSUE_ID';\" 2>/dev/null || echo \"\")\nsqlite3 $DB \"INSERT INTO session_log (issue_id, issue_title, session_id, started_at, message_count, outcome, cost_usd, num_turns, duration_seconds, confidence, resolution_type, alert_category, prompt_variant) SELECT issue_id, issue_title, session_id, started_at, message_count, 'done', COALESCE(cost_usd,0), COALESCE(num_turns,0), COALESCE(duration_seconds,0), COALESCE(confidence,-1), '$RESOLUTION_TYPE', '$ALERT_CAT', COALESCE(prompt_variant,'') FROM sessions WHERE issue_id='$ISSUE_ID'; DELETE FROM sessions WHERE issue_id='$ISSUE_ID'; DELETE FROM queue WHERE issue_id='$ISSUE_ID';\" && /app/claude-gateway/scripts/compute-quality-score.sh '$ISSUE_ID' 2>/dev/null || true && rm -f $GW/$LOCK_FILE && touch \"$GW/gateway.cooldown.$ISSUE_ID\" && echo 'Cleaned up'",
+        "cwd": "/tmp"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "has-issue-id",
+      "name": "Has Issue ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-issue",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "leftValue": "={{ $('Parse Summary').first().json.issueId }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-youtrack",
+      "name": "Post to YouTrack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1220,
+        -50
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Summary').first().json.issueId }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '## Claude Code Session Summary\\n\\n' + $('Parse Summary').first().json.summary }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      }
+    },
+    {
+      "id": "set-to-verify",
+      "name": "Set To Verify (YouTrack)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        -50
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://youtrack.example.net/api/commands",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Summary').first().json.issueId }], query: 'state To Verify' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      }
+    },
+    {
+      "id": "post-matrix-ended",
+      "name": "Post Session Ended to Matrix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        0
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ $('Parse Summary').first().json.targetRoom }}/send/m.room.message/session-end-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.matrixBody }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 30000,
+      "continueOnFail": true
+    },
+    {
+      "id": "build-separator",
+      "name": "Build Separator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const issueId = $('Parse Summary').first().json.issueId || '—';\nconst state = issueId !== '—' ? 'To Verify' : '—';\n\nconst W = 54;\nconst cw = W - 2;\n\nconst artLines = [\n  ' ██████╗██╗  ██╗ █████╗ ████████╗ ██████╗ ██████╗ ███████╗',\n  '██╔════╝██║  ██║██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗██╔════╝',\n  '██║     ███████║███████║   ██║   ██║   ██║██████╔╝███████╗',\n  '██║     ██╔══██║██╔══██║   ██║   ██║   ██║██╔═══╝ ╚════██║',\n  '╚██████╗██║  ██║██║  ██║   ██║   ╚██████╔╝██║     ███████║',\n  ' ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝     ╚══════╝'\n];\n\nconst maxArt = Math.max(...artLines.map(l => l.length));\nconst boxW = Math.max(W, maxArt + 4);\nconst boxCw = boxW - 2;\n\nconst pad = (s) => s + ' '.repeat(Math.max(0, boxCw - s.length));\nconst center = (s) => {\n  const left = Math.floor((boxCw - s.length) / 2);\n  return ' '.repeat(left) + s + ' '.repeat(boxCw - s.length - left);\n};\n\nconst sep = [\n  '╔' + '═'.repeat(boxW) + '╗',\n  ...artLines.map(l => '║ ' + pad(l) + ' ║'),\n  '╠' + '═'.repeat(boxW) + '╣',\n  '║ ' + center('SESSION COMPLETE') + ' ║',\n  '╠' + '═'.repeat(boxW) + '╣',\n  '║ ' + pad('Issue : ' + issueId) + ' ║',\n  '║ ' + pad('State : ' + state) + ' ║',\n  '╚' + '═'.repeat(boxW) + '╝'\n].join('\\n');\n\nconst matrixBody = JSON.stringify({\n  msgtype: 'm.text',\n  body: sep,\n  format: 'org.matrix.custom.html',\n  formatted_body: '<pre><code>' + sep + '</code></pre>'\n});\n\nreturn [{ json: { matrixBody } }];"
+      }
+    },
+    {
+      "id": "post-separator",
+      "name": "Post Session Separator (Matrix)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        0
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ $('Parse Summary').first().json.targetRoom }}/send/m.room.message/separator-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.matrixBody }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      }
+    },
+    {
+      "id": "210437ce-e37c-4a6a-be46-140b6060b12b",
+      "name": "Prepare Summary Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const issueId = $('Parse Summary').first().json.issueId || '';\nconst summary = $('Parse Summary').first().json.summary || '';\n\nconst plainBody = (issueId ? 'Session ended for ' + issueId + '. State set to To Verify.' : 'Session ended (no active issue).') + '\\n\\nSummary:\\n' + summary;\n\nlet htmlSummary = summary\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')\n  .replace(/`([^`]+)`/g, '<code>$1</code>')\n  .replace(/\\n/g, '<br>');\n\nconst htmlBody = (issueId\n  ? '<p><strong>Session ended for ' + issueId + '.</strong> State set to To Verify.</p>'\n  : '<p>Session ended (no active issue).</p>')\n  + '<p><strong>Summary:</strong><br>' + htmlSummary + '</p>';\n\nconst matrixBody = JSON.stringify({\n  msgtype: 'm.notice',\n  body: plainBody,\n  format: 'org.matrix.custom.html',\n  formatted_body: htmlBody\n});\n\nreturn [{ json: { matrixBody } }];"
+      }
+    },
+    {
+      "id": "53974447-7aa4-48f1-8124-28409fb5f958",
+      "name": "Populate Knowledge",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        890,
+        200
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "=DB=\"/app/cubeos/claude-context/gateway.db\"\nISSUE_ID=\"{{ $('Parse Summary').first().json.issueId || '' }}\"\nLESSON=\"{{ ($('Parse Summary').first().json.lesson || '').replace(/'/g, \"''\") }}\"\nPREFIX=$(echo \"$ISSUE_ID\" | cut -d- -f1)\n\n# Store lesson learned (for ALL issue types, not just infra)\nsqlite3 $DB \"CREATE TABLE IF NOT EXISTS lessons_learned (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id TEXT DEFAULT '', lesson TEXT NOT NULL, source TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP);\nCREATE INDEX IF NOT EXISTS idx_ll_created ON lessons_learned(created_at);\" 2>/dev/null\n\nif [ -n \"$LESSON\" ]; then\n  sqlite3 $DB \"INSERT INTO lessons_learned (issue_id, lesson, source) VALUES ('$ISSUE_ID', '$(echo \"$LESSON\" | sed \"s/'/''/g\")', 'claude-code');\"\n  echo \"LESSON:$ISSUE_ID:$LESSON\"\nfi\n\nif [ \"$PREFIX\" != \"IFRNLLEI01PRD\" ] && [ \"$PREFIX\" != \"IFRGRSKG01PRD\" ]; then\n  # Dev project: store session knowledge + episodic memory\n  sqlite3 $DB \"ALTER TABLE incident_knowledge ADD COLUMN project TEXT DEFAULT '';\" 2>/dev/null || true\n\n  SESSION_DATA=$(sqlite3 $DB \"SELECT COALESCE(confidence,-1), COALESCE(cost_usd,0), COALESCE(duration_seconds,0), COALESCE(session_id,'') FROM sessions WHERE issue_id='$ISSUE_ID' LIMIT 1;\" 2>/dev/null)\n  CONFIDENCE=$(echo \"$SESSION_DATA\" | cut -d'|' -f1)\n  COST=$(echo \"$SESSION_DATA\" | cut -d'|' -f2)\n  DURATION=$(echo \"$SESSION_DATA\" | cut -d'|' -f3)\n  SID=$(echo \"$SESSION_DATA\" | cut -d'|' -f4)\n\n  ISSUE_TITLE=$(sqlite3 $DB \"SELECT COALESCE(issue_title,'') FROM sessions WHERE issue_id='$ISSUE_ID';\" 2>/dev/null || echo \"\")\n  SUMMARY_TEXT=$(echo '{{ ($(\"Parse Summary\").first().json.summary || \"\").substring(0, 500).replace(/'/g, \"''\") }}')\n\n  sqlite3 $DB \"INSERT INTO incident_knowledge (alert_rule, hostname, site, resolution, confidence, duration_seconds, cost_usd, session_id, issue_id, project)\n    VALUES ('$(echo \"$ISSUE_TITLE\" | tr -d \"'\" | head -c 200)', '', '', '$(echo \"$SUMMARY_TEXT\" | sed \"s/'/''/g\")', ${CONFIDENCE:--1}, ${DURATION:-0}, ${COST:-0}, '$SID', '$ISSUE_ID', '$PREFIX');\" 2>/dev/null || true\n\n  # Embed for semantic search\n  python3 ~/gitlab/n8n/claude-gateway/scripts/kb-semantic-search.py embed 2>/dev/null || true\n\n  # Write episodic memory for OpenClaw\n  sqlite3 $DB \"INSERT OR REPLACE INTO openclaw_memory (category, key, value, issue_id)\n    VALUES ('dev-session', '${PREFIX}:${ISSUE_ID}', '$(echo \"$SUMMARY_TEXT\" | head -c 200 | sed \"s/'/''/g\") (confidence: ${CONFIDENCE:--1})', '$ISSUE_ID');\" 2>/dev/null || true\n\n  echo \"DEV_KNOWLEDGE:$ISSUE_ID:$PREFIX\"\n  exit 0\nfi\n\nSITE=$([ \"$PREFIX\" = \"IFRGRSKG01PRD\" ] && echo \"gr\" || echo \"nl\")\n\nsqlite3 $DB \"CREATE TABLE IF NOT EXISTS incident_knowledge (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  alert_rule TEXT NOT NULL DEFAULT '',\n  hostname TEXT DEFAULT '',\n  site TEXT DEFAULT '',\n  root_cause TEXT DEFAULT '',\n  resolution TEXT DEFAULT '',\n  confidence REAL DEFAULT -1,\n  duration_seconds INTEGER DEFAULT 0,\n  cost_usd REAL DEFAULT 0,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  session_id TEXT DEFAULT '',\n  issue_id TEXT DEFAULT '',\n  tags TEXT DEFAULT '',\n  embedding TEXT DEFAULT ''\n);\nCREATE INDEX IF NOT EXISTS idx_ik_alert ON incident_knowledge(alert_rule);\nCREATE INDEX IF NOT EXISTS idx_ik_host ON incident_knowledge(hostname);\"\n\nsqlite3 $DB \"ALTER TABLE incident_knowledge ADD COLUMN embedding TEXT DEFAULT '';\" 2>/dev/null || true\n\nSESSION_DATA=$(sqlite3 $DB \"SELECT COALESCE(confidence,-1), COALESCE(cost_usd,0), COALESCE(duration_seconds,0), COALESCE(session_id,'') FROM sessions WHERE issue_id='$ISSUE_ID' LIMIT 1;\" 2>/dev/null)\nCONFIDENCE=$(echo \"$SESSION_DATA\" | cut -d'|' -f1)\nCOST=$(echo \"$SESSION_DATA\" | cut -d'|' -f2)\nDURATION=$(echo \"$SESSION_DATA\" | cut -d'|' -f3)\nSID=$(echo \"$SESSION_DATA\" | cut -d'|' -f4)\n\nYT_FIELDS=$(curl -sf --max-time 10 \\\n  -H \"Authorization: Bearer REDACTED_YT_TOKEN\" \\\n  \"https://youtrack.example.net/api/issues/$ISSUE_ID?fields=customFields(name,value(name))\" 2>/dev/null)\n\nHOSTNAME=$(echo \"$YT_FIELDS\" | python3 -c \"import json,sys;d=json.loads(sys.stdin.read());[print(str(f.get('value','') if not isinstance(f.get('value'),dict) else f['value'].get('name',''))) for f in d.get('customFields',[]) if f['name']=='Hostname']\" 2>/dev/null | head -1)\nALERT_RULE=$(echo \"$YT_FIELDS\" | python3 -c \"import json,sys;d=json.loads(sys.stdin.read());[print(str(f.get('value','') if not isinstance(f.get('value'),dict) else f['value'].get('name',''))) for f in d.get('customFields',[]) if f['name']=='Alert Rule']\" 2>/dev/null | head -1)\n\nSUMMARY=$(echo '{{ ($('Parse Summary').first().json.summary || '').replace(/'/g, \"''\") }}' | head -c 1000)\n\nsqlite3 $DB \"INSERT INTO incident_knowledge (alert_rule, hostname, site, resolution, confidence, duration_seconds, cost_usd, session_id, issue_id) VALUES ('$(echo \"$ALERT_RULE\" | tr -d \"'\")','$(echo \"$HOSTNAME\" | tr -d \"'\")','$SITE','$(echo \"$SUMMARY\" | sed \"s/'/''/g\")',${CONFIDENCE:--1},${DURATION:-0},${COST:-0},'$SID','$ISSUE_ID');\"\n\npython3 ~/gitlab/n8n/claude-gateway/scripts/kb-semantic-search.py embed 2>/dev/null || true\n\necho \"KNOWLEDGE:$ISSUE_ID:$HOSTNAME:$ALERT_RULE\"\n\n# Log A2A completion event\nsqlite3 $DB \"INSERT INTO a2a_task_log (message_id, issue_id, from_tier, from_agent, to_tier, to_agent, message_type, state, payload_summary, confidence)\n  VALUES ('completion-$(date +%s)', '$ISSUE_ID', 2, 'claude-code', 0, 'system', 'completion', 'completed',\n  '$(echo \"$SUMMARY\" | head -c 200 | sed \"s/'/''/g\")', ${CONFIDENCE:--1});\" 2>/dev/null || true\n",
+        "cwd": "/tmp"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Session End Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Claude Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Claude Summary": {
+      "main": [
+        [
+          {
+            "node": "Parse Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Summary": {
+      "main": [
+        [
+          {
+            "node": "Clean Up Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Issue ID?": {
+      "main": [
+        [
+          {
+            "node": "Post to YouTrack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Summary Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to YouTrack": {
+      "main": [
+        [
+          {
+            "node": "Set To Verify (YouTrack)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Session Ended to Matrix": {
+      "main": [
+        [
+          {
+            "node": "Build Separator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Separator": {
+      "main": [
+        [
+          {
+            "node": "Post Session Separator (Matrix)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set To Verify (YouTrack)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary Body": {
+      "main": [
+        [
+          {
+            "node": "Post Session Ended to Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Up Files": {
+      "main": [
+        [
+          {
+            "node": "Populate Knowledge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Populate Knowledge": {
+      "main": [
+        [
+          {
+            "node": "Has Issue ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "6ff814f8-6197-4793-a5e8-a8762fcfea60",
+  "activeVersionId": "6ff814f8-6197-4793-a5e8-a8762fcfea60",
+  "versionCounter": 159,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-06T03:39:21.929Z",
+      "createdAt": "2026-03-06T03:39:21.929Z",
+      "role": "workflow:owner",
+      "workflowId": "rgRGPOZgPcFCvv84",
+      "projectId": "CLDM2Ezgw9101HuF",
+      "project": {
+        "updatedAt": "2025-01-28T17:38:17.181Z",
+        "createdAt": "2025-01-28T17:31:03.531Z",
+        "id": "CLDM2Ezgw9101HuF",
+        "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-03-25T02:15:46.998Z",
+    "createdAt": "2026-03-25T02:15:46.998Z",
+    "versionId": "6ff814f8-6197-4793-a5e8-a8762fcfea60",
+    "workflowId": "rgRGPOZgPcFCvv84",
+    "nodes": [
+      {
+        "id": "webhook",
+        "name": "Session End Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "claude-session-end",
+          "options": {}
+        },
+        "webhookId": "claude-session-end"
+      },
+      {
+        "id": "run-summary",
+        "name": "Run Claude Summary",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          260,
+          0
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "authentication": "privateKey",
+          "command": "={{ $json.body.sessionId ? \"unset CLAUDECODE && /home/app-user/.local/bin/claude -r \" + $json.body.sessionId + \" --output-format json --dangerously-skip-permissions \\\"Summarize what you worked on in this session in 2-3 sentences. Then on a new line starting with LESSON: write a single sentence describing what you learned that would help with similar issues in the future (a novel failure mode, an unexpected root cause, a tool that worked well, or a gotcha to avoid). If nothing novel was learned, write LESSON: none.\\\" 2>&1\" : \"echo '{\\\"result\\\": \\\"No summary available (no session ID)\\\"}'}\" }}",
+          "cwd": "/app/cubeos"
+        },
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        }
+      },
+      {
+        "id": "parse-summary",
+        "name": "Parse Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const ROOM_MAP = {\n  CUBEOS: '!iXTnQsFJahUquYPDdG:matrix.example.net',\n  MESHSAT: '!miZJJDwFQZDkuMcBqL:matrix.example.net',\n  IFRNLLEI01PRD: '!AOMuEtXGyzGFLgObKN:matrix.example.net',\n  IFRGRSKG01PRD: '!NKosBPujbWMevzHaaM:matrix.example.net'\n};\nconst DEFAULT_ROOM = '!PVkZvHgyrtBVEbgpRt:matrix.example.net';\n\nconst stdout = $input.first().json.stdout || '';\nconst stderr = $input.first().json.stderr || '';\nconst webhookData = $('Session End Webhook').first().json;\nconst issueId = webhookData.body?.issueId || '';\nconst issueTitle = webhookData.body?.issueTitle || '';\nconst sessionId = webhookData.body?.sessionId || '';\n\nconst prefix = (issueId || '').split('-')[0];\nconst targetRoom = ROOM_MAP[prefix] || DEFAULT_ROOM;\n\nconst output = stdout.trim() || stderr.trim();\n\nlet summary, lesson = '';\ntry {\n  const parsed = JSON.parse(output);\n  const fullResult = parsed.result || '';\n  // Extract LESSON: line if present\n  const lessonMatch = fullResult.match(/LESSON:\\s*(.+?)(?:\\n|$)/i);\n  if (lessonMatch && lessonMatch[1].trim().toLowerCase() !== 'none') {\n    lesson = lessonMatch[1].trim();\n  }\n  // Summary is everything before LESSON:\n  const lessonIdx = fullResult.indexOf('LESSON:');\n  summary = lessonIdx > 0 ? fullResult.substring(0, lessonIdx).trim() : fullResult;\n} catch (e) {\n  summary = output ? 'Error getting summary: ' + output.substring(0, 500) : 'No summary available (session may have expired)';\n}\n\nreturn [{ json: { summary, lesson, issueId, issueTitle, sessionId, targetRoom } }];"
+        }
+      },
+      {
+        "id": "cleanup-files",
+        "name": "Clean Up Files",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          780,
+          0
+        ],
+        "parameters": {
+          "authentication": "privateKey",
+          "command": "=DB=\"/app/cubeos/claude-context/gateway.db\"\nGW=\"/app/cubeos/claude-context\"\nISSUE_ID=\"{{ $(\"Parse Summary\").first().json.issueId || 'unknown' }}\"\nPREFIX=$(echo \"$ISSUE_ID\" | cut -d- -f1)\ncase \"$PREFIX\" in\n  IFRNLLEI01PRD) LOCK_FILE=\"gateway.lock.infra-nl\" ;;\n  IFRGRSKG01PRD) LOCK_FILE=\"gateway.lock.infra-gr\" ;;\n  CUBEOS) LOCK_FILE=\"gateway.lock.cubeos\" ;;\n  MESHSAT) LOCK_FILE=\"gateway.lock.meshsat\" ;;\n  *) LOCK_FILE=\"gateway.lock.dev\" ;;\nesac\n# Ensure columns exist in both tables\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN cost_usd REAL DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN num_turns INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN duration_seconds INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN confidence REAL DEFAULT -1;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN resolution_type TEXT DEFAULT 'unknown';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN alert_category TEXT DEFAULT '';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE session_log ADD COLUMN prompt_variant TEXT DEFAULT '';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN cost_usd REAL DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN num_turns INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN duration_seconds INTEGER DEFAULT 0;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN confidence REAL DEFAULT -1;\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN prompt_variant TEXT DEFAULT '';\" 2>/dev/null\nsqlite3 $DB \"ALTER TABLE sessions ADD COLUMN alert_category TEXT DEFAULT '';\" 2>/dev/null\n# Determine alert_category from issue title (fallback if Runner didn't set it)\nISSUE_TITLE_LOWER=$(sqlite3 $DB \"SELECT LOWER(issue_title) FROM sessions WHERE issue_id='$ISSUE_ID';\" 2>/dev/null || echo \"\")\nALERT_CAT=$(sqlite3 $DB \"SELECT alert_category FROM sessions WHERE issue_id='$ISSUE_ID' AND alert_category != '';\" 2>/dev/null || echo \"\")\nif [ -z \"$ALERT_CAT\" ]; then\n  ALERT_CAT=\"general\"\n  case \"$ISSUE_TITLE_LOWER\" in\n    *up/down*|*unreachable*|*ping*|*down*) ALERT_CAT=\"availability\" ;;\n    *cpu*|*load*|*memory*|*oom*) ALERT_CAT=\"resource\" ;;\n    *disk*|*storage*|*iscsi*|*lun*) ALERT_CAT=\"storage\" ;;\n    *interface*|*port*|*bgp*|*network*) ALERT_CAT=\"network\" ;;\n    *cilium*|*k8s*|*pod*|*node*|*etcd*) ALERT_CAT=\"kubernetes\" ;;\n    *cert*|*ssl*|*tls*) ALERT_CAT=\"certificate\" ;;\n    *maintenance*|*reboot*|*upgrade*) ALERT_CAT=\"maintenance\" ;;\n    *correlated*|*burst*) ALERT_CAT=\"correlated\" ;;\n  esac\nfi\n# Determine resolution_type from feedback signals\nRESOLUTION_TYPE='unknown'\nFEEDBACK_SCORE=$(sqlite3 $DB \"SELECT CASE \n  WHEN SUM(CASE WHEN feedback_type='thumbs_up' THEN 1 ELSE 0 END) > 0 \n    AND SUM(CASE WHEN feedback_type='thumbs_down' THEN 1 ELSE 0 END) = 0 THEN 'approved'\n  WHEN SUM(CASE WHEN feedback_type='thumbs_down' THEN 1 ELSE 0 END) > 0 \n    AND SUM(CASE WHEN feedback_type='thumbs_up' THEN 1 ELSE 0 END) = 0 THEN 'rejected'\n  WHEN SUM(CASE WHEN feedback_type='thumbs_up' THEN 1 ELSE 0 END) > 0 \n    AND SUM(CASE WHEN feedback_type='thumbs_down' THEN 1 ELSE 0 END) > 0 THEN 'mixed'\n  ELSE 'unscored' END FROM session_feedback WHERE issue_id='$ISSUE_ID';\" 2>/dev/null)\n[ -n \"$FEEDBACK_SCORE\" ] && [ \"$FEEDBACK_SCORE\" != \"unscored\" ] && RESOLUTION_TYPE=\"$FEEDBACK_SCORE\"\n# Get prompt_variant from sessions table\nPROMPT_VARIANT=$(sqlite3 $DB \"SELECT prompt_variant FROM sessions WHERE issue_id='$ISSUE_ID';\" 2>/dev/null || echo \"\")\nsqlite3 $DB \"INSERT INTO session_log (issue_id, issue_title, session_id, started_at, message_count, outcome, cost_usd, num_turns, duration_seconds, confidence, resolution_type, alert_category, prompt_variant) SELECT issue_id, issue_title, session_id, started_at, message_count, 'done', COALESCE(cost_usd,0), COALESCE(num_turns,0), COALESCE(duration_seconds,0), COALESCE(confidence,-1), '$RESOLUTION_TYPE', '$ALERT_CAT', COALESCE(prompt_variant,'') FROM sessions WHERE issue_id='$ISSUE_ID'; DELETE FROM sessions WHERE issue_id='$ISSUE_ID'; DELETE FROM queue WHERE issue_id='$ISSUE_ID';\" && /app/claude-gateway/scripts/compute-quality-score.sh '$ISSUE_ID' 2>/dev/null || true && rm -f $GW/$LOCK_FILE && touch \"$GW/gateway.cooldown.$ISSUE_ID\" && echo 'Cleaned up'",
+          "cwd": "/tmp"
+        },
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "has-issue-id",
+        "name": "Has Issue ID?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1000,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond-has-issue",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                },
+                "leftValue": "={{ $('Parse Summary').first().json.issueId }}",
+                "rightValue": ""
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-youtrack",
+        "name": "Post to YouTrack",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1220,
+          -50
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Summary').first().json.issueId }}/comments",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: '## Claude Code Session Summary\\n\\n' + $('Parse Summary').first().json.summary }) }}",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        }
+      },
+      {
+        "id": "set-to-verify",
+        "name": "Set To Verify (YouTrack)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1440,
+          -50
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "POST",
+          "url": "https://youtrack.example.net/api/commands",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Summary').first().json.issueId }], query: 'state To Verify' }) }}",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        }
+      },
+      {
+        "id": "post-matrix-ended",
+        "name": "Post Session Ended to Matrix",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1660,
+          0
+        ],
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ $('Parse Summary').first().json.targetRoom }}/send/m.room.message/session-end-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.matrixBody }}",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 5,
+        "waitBetweenTries": 30000,
+        "continueOnFail": true
+      },
+      {
+        "id": "build-separator",
+        "name": "Build Separator",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1880,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const issueId = $('Parse Summary').first().json.issueId || '—';\nconst state = issueId !== '—' ? 'To Verify' : '—';\n\nconst W = 54;\nconst cw = W - 2;\n\nconst artLines = [\n  ' ██████╗██╗  ██╗ █████╗ ████████╗ ██████╗ ██████╗ ███████╗',\n  '██╔════╝██║  ██║██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗██╔════╝',\n  '██║     ███████║███████║   ██║   ██║   ██║██████╔╝███████╗',\n  '██║     ██╔══██║██╔══██║   ██║   ██║   ██║██╔═══╝ ╚════██║',\n  '╚██████╗██║  ██║██║  ██║   ██║   ╚██████╔╝██║     ███████║',\n  ' ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝     ╚══════╝'\n];\n\nconst maxArt = Math.max(...artLines.map(l => l.length));\nconst boxW = Math.max(W, maxArt + 4);\nconst boxCw = boxW - 2;\n\nconst pad = (s) => s + ' '.repeat(Math.max(0, boxCw - s.length));\nconst center = (s) => {\n  const left = Math.floor((boxCw - s.length) / 2);\n  return ' '.repeat(left) + s + ' '.repeat(boxCw - s.length - left);\n};\n\nconst sep = [\n  '╔' + '═'.repeat(boxW) + '╗',\n  ...artLines.map(l => '║ ' + pad(l) + ' ║'),\n  '╠' + '═'.repeat(boxW) + '╣',\n  '║ ' + center('SESSION COMPLETE') + ' ║',\n  '╠' + '═'.repeat(boxW) + '╣',\n  '║ ' + pad('Issue : ' + issueId) + ' ║',\n  '║ ' + pad('State : ' + state) + ' ║',\n  '╚' + '═'.repeat(boxW) + '╝'\n].join('\\n');\n\nconst matrixBody = JSON.stringify({\n  msgtype: 'm.text',\n  body: sep,\n  format: 'org.matrix.custom.html',\n  formatted_body: '<pre><code>' + sep + '</code></pre>'\n});\n\nreturn [{ json: { matrixBody } }];"
+        }
+      },
+      {
+        "id": "post-separator",
+        "name": "Post Session Separator (Matrix)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2100,
+          0
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ $('Parse Summary').first().json.targetRoom }}/send/m.room.message/separator-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.matrixBody }}",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        }
+      },
+      {
+        "id": "210437ce-e37c-4a6a-be46-140b6060b12b",
+        "name": "Prepare Summary Body",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1550,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const issueId = $('Parse Summary').first().json.issueId || '';\nconst summary = $('Parse Summary').first().json.summary || '';\n\nconst plainBody = (issueId ? 'Session ended for ' + issueId + '. State set to To Verify.' : 'Session ended (no active issue).') + '\\n\\nSummary:\\n' + summary;\n\nlet htmlSummary = summary\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')\n  .replace(/`([^`]+)`/g, '<code>$1</code>')\n  .replace(/\\n/g, '<br>');\n\nconst htmlBody = (issueId\n  ? '<p><strong>Session ended for ' + issueId + '.</strong> State set to To Verify.</p>'\n  : '<p>Session ended (no active issue).</p>')\n  + '<p><strong>Summary:</strong><br>' + htmlSummary + '</p>';\n\nconst matrixBody = JSON.stringify({\n  msgtype: 'm.notice',\n  body: plainBody,\n  format: 'org.matrix.custom.html',\n  formatted_body: htmlBody\n});\n\nreturn [{ json: { matrixBody } }];"
+        }
+      },
+      {
+        "id": "53974447-7aa4-48f1-8124-28409fb5f958",
+        "name": "Populate Knowledge",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          890,
+          200
+        ],
+        "parameters": {
+          "authentication": "privateKey",
+          "command": "=DB=\"/app/cubeos/claude-context/gateway.db\"\nISSUE_ID=\"{{ $('Parse Summary').first().json.issueId || '' }}\"\nLESSON=\"{{ ($('Parse Summary').first().json.lesson || '').replace(/'/g, \"''\") }}\"\nPREFIX=$(echo \"$ISSUE_ID\" | cut -d- -f1)\n\n# Store lesson learned (for ALL issue types, not just infra)\nsqlite3 $DB \"CREATE TABLE IF NOT EXISTS lessons_learned (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id TEXT DEFAULT '', lesson TEXT NOT NULL, source TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP);\nCREATE INDEX IF NOT EXISTS idx_ll_created ON lessons_learned(created_at);\" 2>/dev/null\n\nif [ -n \"$LESSON\" ]; then\n  sqlite3 $DB \"INSERT INTO lessons_learned (issue_id, lesson, source) VALUES ('$ISSUE_ID', '$(echo \"$LESSON\" | sed \"s/'/''/g\")', 'claude-code');\"\n  echo \"LESSON:$ISSUE_ID:$LESSON\"\nfi\n\nif [ \"$PREFIX\" != \"IFRNLLEI01PRD\" ] && [ \"$PREFIX\" != \"IFRGRSKG01PRD\" ]; then\n  # Dev project: store session knowledge + episodic memory\n  sqlite3 $DB \"ALTER TABLE incident_knowledge ADD COLUMN project TEXT DEFAULT '';\" 2>/dev/null || true\n\n  SESSION_DATA=$(sqlite3 $DB \"SELECT COALESCE(confidence,-1), COALESCE(cost_usd,0), COALESCE(duration_seconds,0), COALESCE(session_id,'') FROM sessions WHERE issue_id='$ISSUE_ID' LIMIT 1;\" 2>/dev/null)\n  CONFIDENCE=$(echo \"$SESSION_DATA\" | cut -d'|' -f1)\n  COST=$(echo \"$SESSION_DATA\" | cut -d'|' -f2)\n  DURATION=$(echo \"$SESSION_DATA\" | cut -d'|' -f3)\n  SID=$(echo \"$SESSION_DATA\" | cut -d'|' -f4)\n\n  ISSUE_TITLE=$(sqlite3 $DB \"SELECT COALESCE(issue_title,'') FROM sessions WHERE issue_id='$ISSUE_ID';\" 2>/dev/null || echo \"\")\n  SUMMARY_TEXT=$(echo '{{ ($(\"Parse Summary\").first().json.summary || \"\").substring(0, 500).replace(/'/g, \"''\") }}')\n\n  sqlite3 $DB \"INSERT INTO incident_knowledge (alert_rule, hostname, site, resolution, confidence, duration_seconds, cost_usd, session_id, issue_id, project)\n    VALUES ('$(echo \"$ISSUE_TITLE\" | tr -d \"'\" | head -c 200)', '', '', '$(echo \"$SUMMARY_TEXT\" | sed \"s/'/''/g\")', ${CONFIDENCE:--1}, ${DURATION:-0}, ${COST:-0}, '$SID', '$ISSUE_ID', '$PREFIX');\" 2>/dev/null || true\n\n  # Embed for semantic search\n  python3 ~/gitlab/n8n/claude-gateway/scripts/kb-semantic-search.py embed 2>/dev/null || true\n\n  # Write episodic memory for OpenClaw\n  sqlite3 $DB \"INSERT OR REPLACE INTO openclaw_memory (category, key, value, issue_id)\n    VALUES ('dev-session', '${PREFIX}:${ISSUE_ID}', '$(echo \"$SUMMARY_TEXT\" | head -c 200 | sed \"s/'/''/g\") (confidence: ${CONFIDENCE:--1})', '$ISSUE_ID');\" 2>/dev/null || true\n\n  echo \"DEV_KNOWLEDGE:$ISSUE_ID:$PREFIX\"\n  exit 0\nfi\n\nSITE=$([ \"$PREFIX\" = \"IFRGRSKG01PRD\" ] && echo \"gr\" || echo \"nl\")\n\nsqlite3 $DB \"CREATE TABLE IF NOT EXISTS incident_knowledge (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  alert_rule TEXT NOT NULL DEFAULT '',\n  hostname TEXT DEFAULT '',\n  site TEXT DEFAULT '',\n  root_cause TEXT DEFAULT '',\n  resolution TEXT DEFAULT '',\n  confidence REAL DEFAULT -1,\n  duration_seconds INTEGER DEFAULT 0,\n  cost_usd REAL DEFAULT 0,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  session_id TEXT DEFAULT '',\n  issue_id TEXT DEFAULT '',\n  tags TEXT DEFAULT '',\n  embedding TEXT DEFAULT ''\n);\nCREATE INDEX IF NOT EXISTS idx_ik_alert ON incident_knowledge(alert_rule);\nCREATE INDEX IF NOT EXISTS idx_ik_host ON incident_knowledge(hostname);\"\n\nsqlite3 $DB \"ALTER TABLE incident_knowledge ADD COLUMN embedding TEXT DEFAULT '';\" 2>/dev/null || true\n\nSESSION_DATA=$(sqlite3 $DB \"SELECT COALESCE(confidence,-1), COALESCE(cost_usd,0), COALESCE(duration_seconds,0), COALESCE(session_id,'') FROM sessions WHERE issue_id='$ISSUE_ID' LIMIT 1;\" 2>/dev/null)\nCONFIDENCE=$(echo \"$SESSION_DATA\" | cut -d'|' -f1)\nCOST=$(echo \"$SESSION_DATA\" | cut -d'|' -f2)\nDURATION=$(echo \"$SESSION_DATA\" | cut -d'|' -f3)\nSID=$(echo \"$SESSION_DATA\" | cut -d'|' -f4)\n\nYT_FIELDS=$(curl -sf --max-time 10 \\\n  -H \"Authorization: Bearer REDACTED_YT_TOKEN\" \\\n  \"https://youtrack.example.net/api/issues/$ISSUE_ID?fields=customFields(name,value(name))\" 2>/dev/null)\n\nHOSTNAME=$(echo \"$YT_FIELDS\" | python3 -c \"import json,sys;d=json.loads(sys.stdin.read());[print(str(f.get('value','') if not isinstance(f.get('value'),dict) else f['value'].get('name',''))) for f in d.get('customFields',[]) if f['name']=='Hostname']\" 2>/dev/null | head -1)\nALERT_RULE=$(echo \"$YT_FIELDS\" | python3 -c \"import json,sys;d=json.loads(sys.stdin.read());[print(str(f.get('value','') if not isinstance(f.get('value'),dict) else f['value'].get('name',''))) for f in d.get('customFields',[]) if f['name']=='Alert Rule']\" 2>/dev/null | head -1)\n\nSUMMARY=$(echo '{{ ($('Parse Summary').first().json.summary || '').replace(/'/g, \"''\") }}' | head -c 1000)\n\nsqlite3 $DB \"INSERT INTO incident_knowledge (alert_rule, hostname, site, resolution, confidence, duration_seconds, cost_usd, session_id, issue_id) VALUES ('$(echo \"$ALERT_RULE\" | tr -d \"'\")','$(echo \"$HOSTNAME\" | tr -d \"'\")','$SITE','$(echo \"$SUMMARY\" | sed \"s/'/''/g\")',${CONFIDENCE:--1},${DURATION:-0},${COST:-0},'$SID','$ISSUE_ID');\"\n\npython3 ~/gitlab/n8n/claude-gateway/scripts/kb-semantic-search.py embed 2>/dev/null || true\n\necho \"KNOWLEDGE:$ISSUE_ID:$HOSTNAME:$ALERT_RULE\"\n\n# Log A2A completion event\nsqlite3 $DB \"INSERT INTO a2a_task_log (message_id, issue_id, from_tier, from_agent, to_tier, to_agent, message_type, state, payload_summary, confidence)\n  VALUES ('completion-$(date +%s)', '$ISSUE_ID', 2, 'claude-code', 0, 'system', 'completion', 'completed',\n  '$(echo \"$SUMMARY\" | head -c 200 | sed \"s/'/''/g\")', ${CONFIDENCE:--1});\" 2>/dev/null || true\n",
+          "cwd": "/tmp"
+        },
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "Session End Webhook": {
+        "main": [
+          [
+            {
+              "node": "Run Claude Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Claude Summary": {
+        "main": [
+          [
+            {
+              "node": "Parse Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Summary": {
+        "main": [
+          [
+            {
+              "node": "Clean Up Files",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Issue ID?": {
+        "main": [
+          [
+            {
+              "node": "Post to YouTrack",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Summary Body",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post to YouTrack": {
+        "main": [
+          [
+            {
+              "node": "Set To Verify (YouTrack)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Session Ended to Matrix": {
+        "main": [
+          [
+            {
+              "node": "Build Separator",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Separator": {
+        "main": [
+          [
+            {
+              "node": "Post Session Separator (Matrix)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set To Verify (YouTrack)": {
+        "main": [
+          [
+            {
+              "node": "Prepare Summary Body",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Summary Body": {
+        "main": [
+          [
+            {
+              "node": "Post Session Ended to Matrix",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clean Up Files": {
+        "main": [
+          [
+            {
+              "node": "Populate Knowledge",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Populate Knowledge": {
+        "main": [
+          [
+            {
+              "node": "Has Issue ID?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Redrick Schuhart",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-03-25T02:15:47.236Z",
+        "id": 894,
+        "workflowId": "rgRGPOZgPcFCvv84",
+        "versionId": "6ff814f8-6197-4793-a5e8-a8762fcfea60",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-03-25T02:15:47.164Z",
+        "id": 893,
+        "workflowId": "rgRGPOZgPcFCvv84",
+        "versionId": "6ff814f8-6197-4793-a5e8-a8762fcfea60",
+        "event": "deactivated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    ]
+  }
+}

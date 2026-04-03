@@ -1,0 +1,237 @@
+{
+  "name": "ChatSecOps Detection Coverage",
+  "versions": {
+    "attack": "16",
+    "navigator": "5.0.1",
+    "layer": "4.5"
+  },
+  "domain": "enterprise-attack",
+  "description": "CrowdSec + scanner detection coverage. 21 techniques from 47 scenarios. Auto-generated from mitre-mapping.json.",
+  "techniques": [
+    {
+      "techniqueID": "T1110.001",
+      "tactic": "credential-access",
+      "color": "#66ff33",
+      "comment": "Detected by: ssh-bf, ssh-slow-bf, http-bf-wordpress_bf",
+      "enabled": true,
+      "score": 3,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1190",
+      "tactic": "initial-access",
+      "color": "#66ff33",
+      "comment": "Detected by: http-bf-wordpress_bf, http-crawl-non_statics, http-path-traversal-probing, http-sqli-probbing-detection, http-cve-2021-41773, http-cve-2021-42013, apache_log4j2_cve-2021-44228, CVE-2022-26134, CVE-2022-35914, CVE-2022-37042, CVE-2022-41082, CVE-2022-41697, CVE-2022-42889, CVE-2022-44877, CVE-2022-46169-bf, f5-big-ip-cve-2020-5902, fortinet-cve-2018-13379, fortinet-cve-2022-40684, grafana-cve-2021-43798, jira_cve-2021-26086, pulse-secure-sslvpn-cve-2019-11510, spring4shell_cve-2022-22965, thinkphp-cve-2018-20062, vmware-cve-2022-22954, vmware-vcenter-vmsa-2021-0027, _scanner/nuclei-cve-detection",
+      "enabled": true,
+      "score": 26,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1110",
+      "tactic": "credential-access",
+      "color": "#99ff66",
+      "comment": "Detected by: http-generic-bf, CVE-2022-46169-bf",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1595.002",
+      "tactic": "reconnaissance",
+      "color": "#66ff33",
+      "comment": "Detected by: http-probing, http-crawl-non_statics, http-bad-user-agent, ltsich/http-w00tw00t",
+      "enabled": true,
+      "score": 4,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1083",
+      "tactic": "discovery",
+      "color": "#66ff33",
+      "comment": "Detected by: http-sensitive-files, http-path-traversal-probing, http-cve-2021-41773, http-cve-2021-42013, grafana-cve-2021-43798, jira_cve-2021-26086",
+      "enabled": true,
+      "score": 6,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1590.005",
+      "tactic": "reconnaissance",
+      "color": "#ccff99",
+      "comment": "Detected by: http-sensitive-files",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1189",
+      "tactic": "initial-access",
+      "color": "#ccff99",
+      "comment": "Detected by: http-xss-probbing",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1498",
+      "tactic": "impact",
+      "color": "#99ff66",
+      "comment": "Detected by: nginx-req-limit-exceeded, _infra/librenms-snmp-monitoring",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1499",
+      "tactic": "impact",
+      "color": "#ccff99",
+      "comment": "Detected by: nginx-req-limit-exceeded",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1505.003",
+      "tactic": "persistence",
+      "color": "#ccff99",
+      "comment": "Detected by: http-backdoors-attempts",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1090",
+      "tactic": "command-and-control",
+      "color": "#ccff99",
+      "comment": "Detected by: http-open-proxy",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1566",
+      "tactic": "initial-access",
+      "color": "#99ff66",
+      "comment": "Detected by: smtp-spam, postfix-spam",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1046",
+      "tactic": "discovery",
+      "color": "#99ff66",
+      "comment": "Detected by: iptables-scan-multi_ports, _scanner/nmap-port-discovery",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1557",
+      "tactic": "credential-access",
+      "color": "#ccff99",
+      "comment": "Detected by: dns-poisoning",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1203",
+      "tactic": "execution",
+      "color": "#66ff33",
+      "comment": "Detected by: apache_log4j2_cve-2021-44228, CVE-2022-26134, CVE-2022-42889, spring4shell_cve-2022-22965, vmware-cve-2022-22954",
+      "enabled": true,
+      "score": 5,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1059",
+      "tactic": "execution",
+      "color": "#99ff66",
+      "comment": "Detected by: CVE-2022-41082, thinkphp-cve-2018-20062",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1552.001",
+      "tactic": "credential-access",
+      "color": "#99ff66",
+      "comment": "Detected by: fortinet-cve-2018-13379, pulse-secure-sslvpn-cve-2019-11510",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1595",
+      "tactic": "reconnaissance",
+      "color": "#ccff99",
+      "comment": "Detected by: local/geo-block",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1557.002",
+      "tactic": "credential-access",
+      "color": "#ccff99",
+      "comment": "Detected by: _scanner/testssl-tls-weakness",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": true
+    },
+    {
+      "techniqueID": "T1496",
+      "tactic": "impact",
+      "color": "#99ff66",
+      "comment": "Detected by: _infra/librenms-snmp-monitoring, _infra/prometheus-resource-alerts",
+      "enabled": true,
+      "score": 2,
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T1485",
+      "tactic": "impact",
+      "color": "#ccff99",
+      "comment": "Detected by: _infra/prometheus-resource-alerts",
+      "enabled": true,
+      "score": 1,
+      "showSubtechniques": false
+    }
+  ],
+  "gradient": {
+    "colors": [
+      "#a1d99b",
+      "#31a354",
+      "#006d2c"
+    ],
+    "minValue": 1,
+    "maxValue": 5
+  },
+  "legendItems": [
+    {
+      "label": "1 scenario",
+      "color": "#a1d99b"
+    },
+    {
+      "label": "2-3 scenarios",
+      "color": "#31a354"
+    },
+    {
+      "label": "4+ scenarios",
+      "color": "#006d2c"
+    }
+  ],
+  "showTacticRowBackground": true,
+  "tacticRowBackground": "#dddddd",
+  "selectTechniquesAcrossTactics": false,
+  "hideDisabled": false,
+  "layout": {
+    "layout": "flat",
+    "aggregateFunction": "average",
+    "showID": true,
+    "showName": true,
+    "showAggregateScores": false,
+    "countUnscored": false,
+    "expandedSubtechniques": "annotated"
+  }
+}

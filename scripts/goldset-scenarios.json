@@ -1,0 +1,237 @@
+[
+  {
+    "id": "GS-01",
+    "name": "LibreNMS device down (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nlmyspeed01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["netbox", "ping", "PVE host"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "GS-02",
+    "name": "LibreNMS device down (GR)",
+    "category": "availability",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "grmeshcentral01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["netbox", "site gr"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "GS-03",
+    "name": "Prometheus K8s OOM kill",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "ContainerOOMKilled",
+      "namespace": "logging",
+      "pod": "loki-0",
+      "severity": "critical",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["kubectl", "OOM", "memory", "limits"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "GS-04",
+    "name": "Prometheus etcd insufficient members",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "etcdInsufficientMembers",
+      "namespace": "kube-system",
+      "severity": "critical",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["etcd", "quorum", "WAL", "fsync"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "GS-05",
+    "name": "LibreNMS port up/down (switch)",
+    "category": "network",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-sw01",
+      "alert_rule": "Port status up/down on interface GigabitEthernet0/12",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["interface", "netbox", "cable"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "GS-06",
+    "name": "Prometheus storage iSCSI latency",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "NodeDiskIOSaturation",
+      "instance": "nlworker01",
+      "device": "sdb",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["iSCSI", "Synology", "iostat"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "GS-07",
+    "name": "Correlated burst (3+ hosts)",
+    "category": "correlated",
+    "site": "nl",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": ["nlnc01", "nlnc02", "nlhaproxy01"],
+      "alert_rule": "Service up/down",
+      "severity": "critical",
+      "burst_count": 3,
+      "burst_window_minutes": 5
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["correlated", "shared root cause", "H1", "H2"],
+      "confidence_range": [0.3, 0.8],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "GS-08",
+    "name": "Recovery after alert (false positive test)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nlmyspeed01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "ok",
+      "state": "recovery"
+    },
+    "expected": {
+      "issue_created": false,
+      "recovery_processed": true,
+      "yt_state_change": "To Verify",
+      "matrix_room": "#infra-nl-prod",
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "GS-09",
+    "name": "Prometheus WAL corruption (GR)",
+    "category": "kubernetes",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "PrometheusTSDBCompactionsFailing",
+      "namespace": "monitoring",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "self_healed": true,
+      "wal_healer_triggered": true,
+      "cooldown_respected": true,
+      "matrix_room": "#infra-gr-prod",
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "GS-10",
+    "name": "Dev issue (CUBEOS feature)",
+    "category": "dev",
+    "site": "nl",
+    "payload": {
+      "alert_type": "youtrack",
+      "issue_id": "CUBEOS-999",
+      "summary": "Add GPS telemetry parsing to HAL layer",
+      "description": "Implement NMEA sentence parsing for GGA/RMC sentences in the HAL GPS module."
+    },
+    "expected": {
+      "matrix_room": "#cubeos",
+      "triage_must_contain": ["PLAN", "IMPLEMENT", "VERIFY"],
+      "confidence_range": [0.5, 1.0],
+      "must_have_react": false,
+      "must_have_approval_gate": false,
+      "max_cost_usd": 5.0,
+      "alert_category": "general",
+      "prompt_variant_recorded": true
+    }
+  }
+]
