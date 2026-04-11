@@ -1,0 +1,267 @@
+{
+  "updatedAt": "2026-04-09T11:17:46.444Z",
+  "createdAt": "2026-04-09T07:58:23.973Z",
+  "id": "fbLxCNWDJmVyPw6j",
+  "name": "NL - Chaos Test Recover",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "wh1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "path": "chaos-recover",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "webhookId": "d312b5a3-a977-4f60-8847-5ea55c2c414b"
+    },
+    {
+      "id": "ssh1",
+      "name": "Run Script",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "python3 /app/claude-gateway/scripts/chaos-test.py recover",
+        "options": {}
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      }
+    },
+    {
+      "id": "resp1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.parse($json.stdout) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Script": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+  "activeVersionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+  "versionCounter": 17,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-09T07:58:23.974Z",
+      "createdAt": "2026-04-09T07:58:23.974Z",
+      "role": "workflow:owner",
+      "workflowId": "fbLxCNWDJmVyPw6j",
+      "projectId": "CLDM2Ezgw9101HuF",
+      "project": {
+        "updatedAt": "2025-01-28T17:38:17.181Z",
+        "createdAt": "2025-01-28T17:31:03.531Z",
+        "id": "CLDM2Ezgw9101HuF",
+        "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-09T11:17:04.233Z",
+    "createdAt": "2026-04-09T11:17:04.233Z",
+    "versionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+    "workflowId": "fbLxCNWDJmVyPw6j",
+    "nodes": [
+      {
+        "id": "wh1",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          250,
+          300
+        ],
+        "parameters": {
+          "path": "chaos-recover",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {
+            "allowedOrigins": "*"
+          }
+        },
+        "webhookId": "d312b5a3-a977-4f60-8847-5ea55c2c414b"
+      },
+      {
+        "id": "ssh1",
+        "name": "Run Script",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          470,
+          300
+        ],
+        "parameters": {
+          "authentication": "privateKey",
+          "command": "python3 /app/claude-gateway/scripts/chaos-test.py recover",
+          "options": {}
+        },
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        }
+      },
+      {
+        "id": "resp1",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          690,
+          300
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.parse($json.stdout) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Run Script",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Script": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Redrick Schuhart",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-09T11:17:46.505Z",
+        "id": 2041,
+        "workflowId": "fbLxCNWDJmVyPw6j",
+        "versionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-04-09T11:17:46.604Z",
+        "id": 2043,
+        "workflowId": "fbLxCNWDJmVyPw6j",
+        "versionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-04-09T11:17:46.474Z",
+        "id": 2040,
+        "workflowId": "fbLxCNWDJmVyPw6j",
+        "versionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+        "event": "deactivated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-04-09T11:17:46.556Z",
+        "id": 2042,
+        "workflowId": "fbLxCNWDJmVyPw6j",
+        "versionId": "7b86d5bf-0557-40fc-b4f8-4f903e3bfdae",
+        "event": "deactivated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    ]
+  }
+}

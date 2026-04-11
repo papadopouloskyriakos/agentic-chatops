@@ -1,0 +1,66 @@
+{
+  "id": "PrcigdZNWvTj9YaL",
+  "name": "NL - VPN Mesh Stats API",
+  "active": true,
+  "nodes": [
+    {
+      "id": "webhook1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "mesh-stats",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {"allowedOrigins": "*"}
+      }
+    },
+    {
+      "id": "ssh1",
+      "name": "Run Stats Script",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [470, 300],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "python3 /app/claude-gateway/scripts/vpn-mesh-stats.py",
+        "options": {}
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      }
+    },
+    {
+      "id": "respond1",
+      "name": "Respond with JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [690, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.parse($json.stdout) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {"name": "Cache-Control", "value": "public, max-age=300"},
+              {"name": "Access-Control-Allow-Origin", "value": "*"}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Run Stats Script", "type": "main", "index": 0}]]},
+    "Run Stats Script": {"main": [[{"node": "Respond with JSON", "type": "main", "index": 0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  }
+}

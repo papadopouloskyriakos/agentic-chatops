@@ -1,0 +1,103 @@
+{
+  "agent": "openclaw",
+  "tier": 1,
+  "model": "openai/gpt-4o",
+  "version": "2026.3.24",
+  "host": "nl-openclaw01",
+  "capabilities": [
+    {
+      "name": "infra-triage",
+      "description": "L1+L2 infrastructure alert triage: YT dedup, host investigation, confidence scoring",
+      "inputSchema": {
+        "type": "object",
+        "required": ["hostname", "ruleName", "severity"],
+        "properties": {
+          "hostname": { "type": "string" },
+          "ruleName": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "warning", "ok"] },
+          "site": { "type": "string", "enum": ["nl", "gr"] }
+        }
+      },
+      "constraints": ["read-only", "max-duration-120s"],
+      "outputFormat": "TRIAGE_JSON"
+    },
+    {
+      "name": "k8s-triage",
+      "description": "Kubernetes alert triage: control plane deep investigation, namespace/pod diagnostics",
+      "inputSchema": {
+        "type": "object",
+        "required": ["alertname", "severity", "namespace"],
+        "properties": {
+          "alertname": { "type": "string" },
+          "severity": { "type": "string" },
+          "namespace": { "type": "string" },
+          "node": { "type": "string" },
+          "pod": { "type": "string" }
+        }
+      },
+      "constraints": ["read-only", "max-duration-120s"],
+      "outputFormat": "TRIAGE_JSON"
+    },
+    {
+      "name": "cross-tier-review",
+      "description": "Review Claude Code analysis with chain-of-verification (5-step checklist)",
+      "inputSchema": {
+        "type": "object",
+        "required": ["issueId", "analysisText"],
+        "properties": {
+          "issueId": { "type": "string" },
+          "analysisText": { "type": "string" },
+          "confidence": { "type": "number" }
+        }
+      },
+      "constraints": ["independent-critic", "must-verify-one-claim"],
+      "outputFormat": "REVIEW_JSON"
+    },
+    {
+      "name": "youtrack-lookup",
+      "description": "Fetch issue details, list issues, update state, post comments",
+      "constraints": ["always-available"]
+    },
+    {
+      "name": "netbox-lookup",
+      "description": "CMDB device/VM/IP/VLAN lookup across all sites (310 objects)",
+      "constraints": ["always-available", "read-only"]
+    },
+    {
+      "name": "playbook-lookup",
+      "description": "Query incident knowledge base for past resolutions",
+      "constraints": ["always-available", "read-only"]
+    },
+    {
+      "name": "memory-recall",
+      "description": "Query episodic memory for past triage outcomes by host/alert",
+      "constraints": ["always-available", "read-only"]
+    },
+    {
+      "name": "proactive-scan",
+      "description": "Daily pre-alert health checks: disk, certs, stale issues, VPN",
+      "constraints": ["user-invocable-only", "read-only"]
+    },
+    {
+      "name": "kubectl-read",
+      "description": "Read-only kubectl commands for K8s diagnostics",
+      "constraints": ["read-only", "no-write-ops"]
+    }
+  ],
+  "routing": {
+    "escalateTo": "claude-code-t2",
+    "acceptsFrom": ["alert-pipeline", "human-t3"],
+    "reviewsFor": ["claude-code-t2"]
+  },
+  "limits": {
+    "maxConcurrent": 1,
+    "costPerSession": null,
+    "timeout": 120,
+    "rateLimitRpm": 500
+  },
+  "blockedCommands": [
+    "rm -rf", "reboot", "shutdown", "init 0", "init 6", "halt", "poweroff",
+    "mkfs", "dd if=/dev/zero", "kubectl delete namespace", "kubectl delete --all",
+    "iptables -F", "systemctl stop n8n"
+  ]
+}

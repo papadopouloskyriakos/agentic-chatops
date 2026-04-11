@@ -1,0 +1,491 @@
+[
+  {
+    "id": "DS-01",
+    "name": "LibreNMS device down — PVE host (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve02",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["netbox", "ping", "PVE host", "K8s"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "DS-02",
+    "name": "LibreNMS device down — GPU host (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-gpu01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["netbox", "ping", "Ollama", "embedding"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "DS-03",
+    "name": "LibreNMS recovery after extended outage (GR)",
+    "category": "availability",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-pihole01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "ok",
+      "state": "recovery",
+      "downtime_minutes": 45
+    },
+    "expected": {
+      "issue_created": false,
+      "recovery_processed": true,
+      "yt_state_change": "To Verify",
+      "matrix_room": "#infra-gr-prod",
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "DS-04",
+    "name": "Prometheus K8s CrashLoopBackOff",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "KubePodCrashLooping",
+      "namespace": "default",
+      "pod": "cubeos-api-6f7b8c9d4-x2k9m",
+      "container": "cubeos-api",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["kubectl", "CrashLoop", "logs", "restart"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "DS-05",
+    "name": "Prometheus K8s pod eviction (GR)",
+    "category": "kubernetes",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "KubePodEvicted",
+      "namespace": "monitoring",
+      "pod": "thanos-compact-0",
+      "reason": "The node was low on resource: memory",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["kubectl", "evict", "memory", "node"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "DS-06",
+    "name": "Prometheus K8s OOM kill — Cilium agent",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "ContainerOOMKilled",
+      "namespace": "kube-system",
+      "pod": "cilium-agent-nlworker03",
+      "container": "cilium-agent",
+      "severity": "critical",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["kubectl", "OOM", "cilium", "CNI", "limits"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 4.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "DS-07",
+    "name": "LibreNMS BGP session down (NL firewall)",
+    "category": "network",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-fw01",
+      "alert_rule": "BGP Session Down — peer 203.0.113.X",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["BGP", "VPN", "cross-site", "firewall"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "DS-08",
+    "name": "LibreNMS interface down — GR switch uplink",
+    "category": "network",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-sw01",
+      "alert_rule": "Port status up/down on interface TenGigabitEthernet0/1",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["interface", "netbox", "uplink", "cable"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "DS-09",
+    "name": "Prometheus iSCSI target latency spike (GR)",
+    "category": "storage",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "NodeDiskIOSaturation",
+      "instance": "grworker01",
+      "device": "sdb",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["iSCSI", "ZFS", "iostat", "gr-pve02"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "DS-10",
+    "name": "Prometheus NFS mount stale (NL)",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "NFSMountStale",
+      "instance": "nlworker02",
+      "mountpoint": "/mnt/synology-data",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["NFS", "mount", "Synology", "showmount"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "DS-11",
+    "name": "Prometheus TLS certificate expiring (NL)",
+    "category": "certificate",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "CertificateExpiringSoon",
+      "instance": "nlhaproxy01",
+      "domain": "n8n.example.net",
+      "days_remaining": 7,
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["certificate", "expir", "renewal", "Let's Encrypt"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "DS-12",
+    "name": "Prometheus TLS version mismatch (GR)",
+    "category": "certificate",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "TLSVersionMismatch",
+      "instance": "gr-dmz01",
+      "expected_version": "TLSv1.3",
+      "actual_version": "TLSv1.2",
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["TLS", "version", "cipher", "config"],
+      "confidence_range": [0.3, 0.8],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "DS-13",
+    "name": "CrowdSec brute-force SSH (NL DMZ)",
+    "category": "security",
+    "site": "nl",
+    "payload": {
+      "alert_type": "crowdsec",
+      "hostname": "nldmz01",
+      "scenario": "crowdsecurity/ssh-bf",
+      "source_ip": "203.0.113.42",
+      "decisions": [{"type": "ban", "duration": "4h"}],
+      "severity": "high"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["CrowdSec", "SSH", "brute-force", "ban"],
+      "confidence_range": [0.3, 0.8],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "security"
+    }
+  },
+  {
+    "id": "DS-14",
+    "name": "Security scan critical CVE finding (GR)",
+    "category": "security",
+    "site": "gr",
+    "payload": {
+      "alert_type": "security_scan",
+      "hostname": "gr-dmz01",
+      "scanner": "nuclei",
+      "finding": "CVE-2024-50340",
+      "severity": "critical",
+      "cvss": 9.1,
+      "target": "203.0.113.X:443",
+      "baseline_diff": true
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["CVE", "nuclei", "critical", "baseline"],
+      "confidence_range": [0.5, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "security"
+    }
+  },
+  {
+    "id": "DS-15",
+    "name": "Correlated burst — 2 hosts (NL switches)",
+    "category": "correlated",
+    "site": "nl",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": ["nl-sw01", "nlsw02"],
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "burst_count": 2,
+      "burst_window_minutes": 3
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["correlated", "switch", "upstream", "power"],
+      "confidence_range": [0.3, 0.8],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "DS-16",
+    "name": "Correlated burst — 5 hosts (GR K8s workers)",
+    "category": "correlated",
+    "site": "gr",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": ["grworker01", "grworker02", "grworker03", "grcp01", "grcp02"],
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "burst_count": 5,
+      "burst_window_minutes": 2
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["correlated", "K8s", "cluster", "shared root cause"],
+      "confidence_range": [0.3, 0.7],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "DS-17",
+    "name": "Alert during ASA weekly reboot (NL)",
+    "category": "maintenance",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-fw01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert",
+      "maintenance_active": true,
+      "maintenance_reason": "ASA EEM watchdog reboot (weekly)",
+      "maintenance_event_id": "asa-reboot-nl-fw01"
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "ASA weekly EEM reboot — 4-layer suppression should prevent triage",
+      "maintenance_suppressed": true
+    }
+  },
+  {
+    "id": "DS-18",
+    "name": "Alert during PVE kernel maintenance (GR)",
+    "category": "maintenance",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-pve01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert",
+      "maintenance_active": true,
+      "maintenance_reason": "PVE kernel upgrade via AWX",
+      "maintenance_eta_minutes": 60
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "PVE kernel maintenance in progress — gateway.maintenance suppression applies",
+      "maintenance_suppressed": true
+    }
+  },
+  {
+    "id": "DS-19",
+    "name": "Dev issue — CUBEOS feature request",
+    "category": "dev",
+    "site": "nl",
+    "payload": {
+      "alert_type": "youtrack",
+      "issue_id": "CUBEOS-1042",
+      "summary": "Implement IMU sensor fusion for attitude estimation",
+      "description": "Add complementary filter combining accelerometer and gyroscope data in the HAL IMU module for real-time attitude estimation."
+    },
+    "expected": {
+      "matrix_room": "#cubeos",
+      "triage_must_contain": ["PLAN", "IMPLEMENT", "VERIFY"],
+      "confidence_range": [0.5, 1.0],
+      "must_have_react": false,
+      "must_have_approval_gate": false,
+      "max_cost_usd": 5.0,
+      "alert_category": "general",
+      "prompt_variant_recorded": true
+    }
+  },
+  {
+    "id": "DS-20",
+    "name": "Dev issue — MESHSAT bug fix",
+    "category": "dev",
+    "site": "nl",
+    "payload": {
+      "alert_type": "youtrack",
+      "issue_id": "MESHSAT-87",
+      "summary": "LoRa packet loss above 5% at max TX power",
+      "description": "When transmitting at maximum power level (20 dBm), packet loss exceeds 5% threshold. Suspect SPI timing issue between MCU and SX1276 transceiver."
+    },
+    "expected": {
+      "matrix_room": "#meshsat",
+      "triage_must_contain": ["PLAN", "IMPLEMENT", "VERIFY"],
+      "confidence_range": [0.5, 1.0],
+      "must_have_react": false,
+      "must_have_approval_gate": false,
+      "max_cost_usd": 5.0,
+      "alert_category": "general",
+      "prompt_variant_recorded": true
+    }
+  }
+]

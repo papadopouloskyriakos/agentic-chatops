@@ -1,0 +1,2336 @@
+{
+  "updatedAt": "2026-04-11T14:30:06.047Z",
+  "createdAt": "2026-03-14T20:10:21.622Z",
+  "id": "CqrN7hNiJsATcJGE",
+  "name": "NL - Prometheus Alert Receiver",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "prometheus-alert",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prometheus-alert",
+        "options": {},
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      }
+    },
+    {
+      "id": "load-prom-alerts",
+      "name": "Load Prom Alerts",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "parameters": {
+        "command": "cat /app/cubeos/claude-context/active-prom-alerts.json 2>/dev/null || echo '{}'; echo '---MAINT---'; cat /home/app-user/gateway.maintenance 2>/dev/null || echo 'NONE'",
+        "authentication": "privateKey"
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "parse-alerts",
+      "name": "Parse Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// \u2500\u2500\u2500 Maintenance mode check \u2500\u2500\u2500\nconst sshRaw = $input.first().json.stdout || '';\nconst maintSplit = sshRaw.split('---MAINT---');\nconst alertsJson = (maintSplit[0] || '').trim();\nconst maintRaw = (maintSplit[1] || 'NONE').trim();\n\nlet maintenanceActive = false;\nlet maintenanceInfo = null;\nif (maintRaw !== 'NONE' && maintRaw !== '') {\n  try {\n    maintenanceInfo = JSON.parse(maintRaw);\n    maintenanceActive = true;\n  } catch(e) {\n    maintenanceActive = true;\n    maintenanceInfo = { reason: maintRaw };\n  }\n}\n\nif (maintenanceActive) {\n  return [{ json: {\n    hasContent: false, isRepeat: false, isAlert: false, isRecovery: false,\n    isLastRecovery: false, hostname: '', ruleName: '',\n    alertsB64: '', existingIssueId: '', repeatAction: 'none', shouldEscalate: false,\n    flapCount: 0, isBurst: false, burstHosts: '', burstRules: '', burstSeverities: '',\n    maintenanceSuppressed: true, maintenanceReason: maintenanceInfo?.reason || 'scheduled'\n  }}];\n}\n// \u2500\u2500\u2500 End maintenance check \u2500\u2500\u2500\n\nconst webhookData = $('Respond OK').first().json;\n// sshData reconstructed from maintenance-aware SSH output split\nconst sshData = { stdout: alertsJson };\n\nlet body;\nif (webhookData.body && typeof webhookData.body === 'object' && webhookData.body.body) {\n  body = webhookData.body.body;\n} else if (webhookData.body && typeof webhookData.body === 'object') {\n  body = webhookData.body;\n} else {\n  body = webhookData;\n}\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch(e) { body = {}; }\n}\n\nconst sd = $getWorkflowStaticData('global');\nif (!sd.activeAlerts) sd.activeAlerts = {};\nif (!sd.closedAlerts) sd.closedAlerts = {};\nif (!sd.currentBurst) sd.currentBurst = { startTime: 0, alerts: [], fired: false };\n\nconst BURST_THRESHOLD = 3;\nconst BURST_WINDOW_MS = 300000;\nconst BURST_RESET_MS = 600000;\nconst CREATION_LOCK_MS = 60000;\nconst ACTIVE_TTL_MS = 7200000;\nconst RECOVERED_TTL_MS = 14400000;\nconst FLAPPING_EXTENDED_TTL_MS = VMID_REDACTED;\nconst CLOSED_COOLDOWN_MS = 300000;\nconst FLAP_ESCALATE_THRESHOLD = 2;\n\nif (Object.keys(sd.activeAlerts).length === 0) {\n  const sshOut = sshData.stdout || '';\n  if (sshOut.trim() && sshOut.trim() !== '{}') {\n    try {\n      const loaded = JSON.parse(sshOut.trim());\n      if (loaded && typeof loaded === 'object' && !Array.isArray(loaded)) {\n        sd.activeAlerts = loaded;\n      }\n    } catch(e) {}\n  }\n}\n\nif (body.action === 'register' && body.alertKey && body.issueId) {\n  const entry = sd.activeAlerts[body.alertKey];\n  if (entry) {\n    entry.issueId = body.issueId;\n    entry.registeredAt = Date.now();\n  } else {\n    sd.activeAlerts[body.alertKey] = {\n      issueId: body.issueId, registeredAt: Date.now(),\n      firstSeen: Date.now(), lastSeen: Date.now(), count: 1, flapCount: 0\n    };\n  }\n  const alertsB64 = Buffer.from(JSON.stringify(sd.activeAlerts)).toString('base64');\n  return [{ json: { hasContent: false, isRepeat: false, isAlert: false, isRecovery: false,\n    isLastRecovery: false, alertKey: body.alertKey, existingIssueId: body.issueId,\n    alertsB64, repeatAction: 'none', shouldTriage: false, shouldEscalate: false,\n    commentText: '', isBurst: false, burstAlertKeys: '', burstNamespaces: '',\n    flapCount: 0, expiredRecoveryIssues: '' } }];\n}\n\nconst alerts = body.alerts || [body];\nconst batchStatus = body.status || 'unknown';\nconst results = [];\n\nconst now0 = Date.now();\nif (sd.currentBurst.startTime && (now0 - sd.currentBurst.startTime > BURST_RESET_MS)) {\n  sd.currentBurst = { startTime: 0, alerts: [], fired: false };\n}\n\nconst processedRecoveries = new Set();\n\nfor (const alert of alerts) {\n  const labels = alert.labels || {};\n  const annotations = alert.annotations || {};\n  const alertStatus = alert.status || batchStatus;\n  const severity = labels.severity || 'unknown';\n  const alertname = labels.alertname || 'Unknown';\n  const namespace = labels.namespace || 'cluster-wide';\n  const pod = labels.pod || '';\n  const node = labels.node || labels.instance || '';\n  const summary = annotations.summary || annotations.description || alertname;\n\n  if (alertname === 'Watchdog' || alertname === 'InfoInhibitor' || severity === 'info') continue;\n\n  const isRecovery = alertStatus === 'resolved';\n  const isAlert = !isRecovery;\n  const hostname = node.replace(/:.*/, '').replace(/\\.example\\.net$/, '');\n  const alertKey = alertname + ':' + namespace;\n  const safeAlertname = alertname.replace(/[^a-zA-Z0-9_-]/g, '');\n  const safeSummary = summary.replace(/'/g, '').substring(0, 200);\n  const safeNamespace = (namespace || 'cluster-wide').replace(/[^a-zA-Z0-9_-]/g, '');\n  const safeNode = hostname.replace(/[^a-zA-Z0-9._-]/g, '');\n  const safePod = pod.replace(/[^a-zA-Z0-9._-]/g, '');\n\n  let isRepeat = false;\n  let existingIssueId = '';\n  let repeatAction = 'none';\n  let commentText = '';\n  let isLastRecovery = false;\n  let shouldTriage = false;\n  let shouldEscalate = false;\n  let flapCount = 0;\n\n  if (isAlert) {\n    if (sd.closedAlerts[alertKey]) {\n      if (Date.now() - sd.closedAlerts[alertKey] < CLOSED_COOLDOWN_MS) {\n        continue;\n      } else {\n        delete sd.closedAlerts[alertKey];\n      }\n    }\n\n    const entry = sd.activeAlerts[alertKey];\n    if (entry) {\n      existingIssueId = entry.issueId || '';\n      entry.lastSeen = Date.now();\n      entry.count = (entry.count || 1) + 1;\n\n      if (entry.recoveredAt) {\n        entry.flapCount = (entry.flapCount || 0) + 1;\n        delete entry.recoveredAt;\n      }\n      flapCount = entry.flapCount || 0;\n\n      if (existingIssueId) {\n        isRepeat = true;\n        repeatAction = 'check_yt';\n        commentText = 'Alert re-fired: ' + alertname + ' in ' + namespace +\n          ' at ' + new Date().toISOString() + ' (count: ' + entry.count +\n          (flapCount > 0 ? ', flap #' + flapCount : '') + ')';\n\n        if (flapCount >= FLAP_ESCALATE_THRESHOLD) {\n          // Fix C: Escalation cooldown \u2014 max 1 escalation per hour per alert\n          const lastEsc = entry.lastEscalatedAt || 0;\n          if (now - lastEsc >= 3600000) {\n            shouldEscalate = true;\n            entry.lastEscalatedAt = now;\n          } else {\n            shouldEscalate = false;\n            commentText += ' (escalation cooldown \\u2014 last escalated ' + Math.round((now - lastEsc) / 60000) + 'min ago)';\n          }\n        }\n      } else {\n        if (entry.firstSeen && (Date.now() - entry.firstSeen < CREATION_LOCK_MS)) {\n          continue;\n        }\n        isRepeat = false;\n        sd.activeAlerts[alertKey] = {\n          issueId: null, firstSeen: Date.now(), lastSeen: Date.now(),\n          count: 1, flapCount: entry.flapCount || 0\n        };\n      }\n    } else {\n      sd.activeAlerts[alertKey] = {\n        issueId: null, firstSeen: Date.now(), lastSeen: Date.now(),\n        count: 1, flapCount: 0\n      };\n    }\n\n    shouldTriage = !isRepeat;\n\n    if (!isRepeat) {\n      if (!sd.currentBurst.startTime) sd.currentBurst.startTime = Date.now();\n      if (!sd.currentBurst.alerts.includes(alertKey)) sd.currentBurst.alerts.push(alertKey);\n    }\n  }\n\n  if (isRecovery) {\n    if (processedRecoveries.has(alertKey)) continue;\n    processedRecoveries.add(alertKey);\n    // Fix E: Cross-execution dedup \u2014 skip if same alert resolved within 60s\n    const recoveryDedupKey = '__recovery_' + alertKey;\n    if (sd.activeAlerts[recoveryDedupKey] && (now0 - sd.activeAlerts[recoveryDedupKey] < 60000)) {\n      continue;\n    }\n    sd.activeAlerts[recoveryDedupKey] = now0;\n\n    const entry = sd.activeAlerts[alertKey];\n    if (entry) {\n      if (entry.recoveredAt) {\n        continue;\n      }\n      existingIssueId = entry.issueId || '';\n      flapCount = entry.flapCount || 0;\n\n      entry.recoveredAt = Date.now();\n\n      if (flapCount === 0) {\n        isLastRecovery = true;\n        commentText = 'Alert resolved: ' + alertname + ' in ' + namespace +\n          ' at ' + new Date().toISOString();\n      } else {\n        isLastRecovery = false;\n        commentText = 'Alert resolved: ' + alertname + ' in ' + namespace +\n          ' at ' + new Date().toISOString() +\n          ' (after ' + flapCount + ' flap(s) \\u2014 keeping issue open for review)';\n      }\n\n      sd.closedAlerts[alertKey] = Date.now();\n    }\n\n    const burstIdx = sd.currentBurst.alerts.indexOf(alertKey);\n    if (burstIdx !== -1) sd.currentBurst.alerts.splice(burstIdx, 1);\n  }\n\n  const now = Date.now();\n  const expiredRecoveryIssueIds = [];\n  for (const k of Object.keys(sd.activeAlerts)) {\n    const e = sd.activeAlerts[k];\n    if (e.recoveredAt) {\n      const ttl = (e.flapCount > 0) ? FLAPPING_EXTENDED_TTL_MS : RECOVERED_TTL_MS;\n      if (now - e.recoveredAt > ttl) {\n        if (e.issueId) expiredRecoveryIssueIds.push(e.issueId);\n        delete sd.activeAlerts[k];\n      }\n    } else if (e.lastSeen && (now - e.lastSeen > ACTIVE_TTL_MS)) {\n      delete sd.activeAlerts[k];\n    }\n  }\n  for (const k of Object.keys(sd.closedAlerts)) {\n    if (now - sd.closedAlerts[k] > 1800000) delete sd.closedAlerts[k];\n  }\n\n  let isBurst = false;\n  let burstAlertKeys = '';\n  let burstNamespaces = '';\n  if (isAlert && !sd.currentBurst.fired && sd.currentBurst.alerts.length >= BURST_THRESHOLD) {\n    isBurst = true;\n    sd.currentBurst.fired = true;\n    burstAlertKeys = sd.currentBurst.alerts.join(',');\n    const nsSet = new Set(sd.currentBurst.alerts.map(k => k.split(':').slice(1).join(':')));\n    burstNamespaces = [...nsSet].join(',');\n  }\n\n  const flapLabel = flapCount > 0 ? ' [FLAPPING x' + flapCount + ']' : '';\n  const escalateLabel = shouldEscalate ? ' \\u2b06\\ufe0f ESCALATING' : '';\n  const emoji = isRecovery ? '\\u2705' : (severity === 'critical' ? '\\ud83d\\udd34' : '\\ud83d\\udfe1');\n  const stateLabel = isRecovery ? 'RESOLVED' : 'ALERT';\n\n  const plainBody = emoji + ' [Prometheus] ' + stateLabel + ': ' + alertname +\n    ' (' + severity + ')' + flapLabel + escalateLabel + '\\n' +\n    'Namespace: ' + namespace + '\\n' +\n    (pod ? 'Pod: ' + pod + '\\n' : '') +\n    (hostname ? 'Node: ' + hostname + '\\n' : '') +\n    'Summary: ' + summary;\n\n  const htmlBody = '<b>' + emoji + ' [Prometheus] ' + stateLabel + ':</b> ' + alertname +\n    ' (<code>' + severity + '</code>)' +\n    (flapCount > 0 ? ' <b>[FLAPPING x' + flapCount + ']</b>' : '') +\n    (shouldEscalate ? ' <b>\\u2b06\\ufe0f ESCALATING</b>' : '') + '<br/>' +\n    'Namespace: ' + namespace + '<br/>' +\n    (pod ? 'Pod: <code>' + pod + '</code><br/>' : '') +\n    (hostname ? 'Node: <code>' + hostname + '</code><br/>' : '') +\n    'Summary: ' + summary;\n\n  const alertsB64 = Buffer.from(JSON.stringify(sd.activeAlerts)).toString('base64');\n\n  results.push({\n    json: {\n      alertname: safeAlertname, severity, namespace: safeNamespace, pod: safePod,\n      hostname: safeNode, summary: safeSummary, isRecovery, isAlert, stateLabel,\n      alertKey, plainBody, htmlBody,\n      matrixBody: JSON.stringify({\n        msgtype: isRecovery ? 'm.notice' : 'm.text',\n        body: plainBody, format: 'org.matrix.custom.html', formatted_body: htmlBody\n      }),\n      shouldTriage, shouldEscalate, hasContent: true, isRepeat, existingIssueId,\n      repeatAction, commentText, alertsB64, isLastRecovery, flapCount,\n      isBurst, burstAlertKeys, burstNamespaces,\n      expiredRecoveryIssues: expiredRecoveryIssueIds.join(',')\n    }\n  });\n}\n\nif (results.length === 0) {\n  const alertsB64 = Buffer.from(JSON.stringify(sd.activeAlerts)).toString('base64');\n  return [{ json: { hasContent: false, alertsB64, isBurst: false, burstAlertKeys: '',\n    burstNamespaces: '', expiredRecoveryIssues: '' } }];\n}\n\nreturn results;",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "save-prom-alerts",
+      "name": "Save Prom Alerts",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "parameters": {
+        "command": "={{ \"echo '\" + $(\"Parse Alerts\").first().json.alertsB64 + \"' | base64 -d > /app/cubeos/claude-context/active-prom-alerts.json.tmp && mv /app/cubeos/claude-context/active-prom-alerts.json.tmp /app/cubeos/claude-context/active-prom-alerts.json\" + ($(\"Parse Alerts\").first().json.isRecovery ? \"; rmdir /tmp/prom-triage-lock-\" + $(\"Parse Alerts\").first().json.alertKey.replace(/[^a-zA-Z0-9_-]/g, \"_\") + \" 2>/dev/null; true\" : \"\") }}",
+        "authentication": "privateKey"
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "has-alerts",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-alerts-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Parse Alerts').first().json.hasContent }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "is-repeat",
+      "name": "Is Repeat?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "is-repeat-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Parse Alerts').first().json.isRepeat }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-to-matrix",
+      "name": "Post to Matrix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/prom-{{ Date.now() }}-{{ Math.random().toString(36).substr(2,6) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Parse Alerts').first().json.matrixBody }}",
+        "options": {}
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "is-alert",
+      "name": "Is Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "is-alert-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Parse Alerts').first().json.isAlert }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "should-triage",
+      "name": "Should Triage?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1980,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "should-triage-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Parse Alerts').first().json.shouldTriage }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "acquire-triage-lock",
+      "name": "Acquire Triage Lock",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        100
+      ],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "parameters": {
+        "command": "={{ 'ALERT_KEY=\"' + $('Parse Alerts').first().json.alertKey.replace(/[^a-zA-Z0-9_:-]/g, '_') + '\"; LOCK_DIR=\"/tmp/prom-triage-lock-${ALERT_KEY}\"; if mkdir \"$LOCK_DIR\" 2>/dev/null; then echo \"PROCEED\"; (sleep 300 && rmdir \"$LOCK_DIR\" 2>/dev/null) </dev/null >/dev/null 2>&1 & else echo \"LOCKED\"; fi' }}",
+        "authentication": "privateKey"
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "lock-ok",
+      "name": "Lock OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2420,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lock-ok-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.stdout.includes('PROCEED') }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-triage-instruction",
+      "name": "Post Triage Instruction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/triage-{{ Date.now() }}-{{ Math.random().toString(36).substr(2,6) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: '@openclaw use the exec tool to run: ./skills/k8s-triage/k8s-triage.sh \"' + $('Parse Alerts').first().json.alertname + '\" \"' + $('Parse Alerts').first().json.severity + '\" \"' + $('Parse Alerts').first().json.namespace + '\" \"' + $('Parse Alerts').first().json.summary.substring(0,100) + '\" \"' + $('Parse Alerts').first().json.hostname + '\" \"' + $('Parse Alerts').first().json.pod + '\"', format: 'org.matrix.custom.html', formatted_body: '<a href=\"https://matrix.to/#/@openclaw:matrix.example.net\">@openclaw</a> <strong>Investigating:</strong> <code>' + $('Parse Alerts').first().json.alertname + '</code><br><small>' + ($('Parse Alerts').first().json.namespace || '') + ' | ' + $('Parse Alerts').first().json.severity + ($('Parse Alerts').first().json.hostname ? ' | ' + $('Parse Alerts').first().json.hostname : '') + '</small><br><code>k8s-triage.sh \"' + $('Parse Alerts').first().json.alertname + '\"</code>', 'm.mentions': { user_ids: ['@openclaw:matrix.example.net'] } }) }}",
+        "options": {}
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "fetch-issue-state",
+      "name": "Fetch Issue State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}?fields=id,idReadable,customFields(name,value(name))",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      }
+    },
+    {
+      "id": "evaluate-repeat-action",
+      "name": "Evaluate Repeat Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -200
+      ],
+      "parameters": {
+        "jsCode": "const parseAlert = $('Parse Alerts').first().json;\nconst ytResponse = $input.first().json;\n\nlet repeatAction = 'comment';\nlet ytState = 'unknown';\n\ntry {\n  const customFields = ytResponse.customFields || [];\n  const stateField = customFields.find(f => f.name === 'State');\n  if (stateField && stateField.value) {\n    ytState = stateField.value.name || 'unknown';\n  }\n} catch(e) {\n  ytState = 'unknown';\n}\n\nif (!ytResponse.id && !ytResponse.idReadable) {\n  repeatAction = 'new';\n} else if (ytState === 'Done' || ytState === 'Cancelled' || ytState === 'Duplicate') {\n  repeatAction = 'new';\n  const sd = $getWorkflowStaticData('global');\n  if (sd.activeAlerts && sd.activeAlerts[parseAlert.alertKey]) {\n    sd.activeAlerts[parseAlert.alertKey].issueId = null;\n  }\n} else if (ytState === 'To Verify') {\n  repeatAction = 'reopen';\n} else {\n  repeatAction = 'comment';\n}\n\nconst shouldEscalate = parseAlert.shouldEscalate || false;\nconst flapCount = parseAlert.flapCount || 0;\n\nreturn [{ json: { ...parseAlert, repeatAction, ytState, shouldEscalate, flapCount } }];",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "repeat-action-switch",
+      "name": "Repeat Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1980,
+        -200
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "comment",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.repeatAction }}",
+                    "rightValue": "comment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "caseSensitive": true
+                    }
+                  }
+                ],
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                }
+              }
+            },
+            {
+              "outputKey": "reopen",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.repeatAction }}",
+                    "rightValue": "reopen",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "caseSensitive": true
+                    }
+                  }
+                ],
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                }
+              }
+            },
+            {
+              "outputKey": "new",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.repeatAction }}",
+                    "rightValue": "new",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "caseSensitive": true
+                    }
+                  }
+                ],
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                }
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "post-realert-comment",
+      "name": "Post Re-alert Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $('Parse Alerts').first().json.commentText }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "move-to-open",
+      "name": "Move to Open",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/commands",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Alerts').first().json.existingIssueId }], query: 'state Open' }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      }
+    },
+    {
+      "id": "post-reopen-comment",
+      "name": "Post Reopen Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: 'Alert re-fired after To Verify. Reopening. ' + $('Parse Alerts').first().json.commentText }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "has-issue",
+      "name": "Has Issue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1980,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-issue-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Parse Alerts').first().json.existingIssueId !== '' }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-recovery-comment",
+      "name": "Post Recovery Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $('Parse Alerts').first().json.commentText }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "is-last-recovery",
+      "name": "Is Last Recovery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2420,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "is-last-recovery-c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Parse Alerts').first().json.isLastRecovery }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "move-to-verify",
+      "name": "Move to Verify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/commands",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Alerts').first().json.existingIssueId }], query: 'state To Verify' }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      }
+    },
+    {
+      "id": "post-all-clear",
+      "name": "Post All Clear",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        350
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/allclear-{{ Date.now() }}-{{ Math.random().toString(36).substr(2,6) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: '\\u2705 [Prometheus] All clear: ' + $('Parse Alerts').first().json.alertKey + ' \u2014 issue ' + $('Parse Alerts').first().json.existingIssueId + ' moved to To Verify', format: 'org.matrix.custom.html', formatted_body: '<b>\\u2705 [Prometheus] All clear:</b> ' + $('Parse Alerts').first().json.alertKey + ' \u2014 issue <code>' + $('Parse Alerts').first().json.existingIssueId + '</code> moved to To Verify' }) }}",
+        "options": {}
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "should-escalate-repeat",
+      "name": "Should Escalate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "escalate-check",
+              "leftValue": "={{ $('Parse Alerts').first().json.shouldEscalate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "post-escalation-instruction",
+      "name": "Post Escalation Instruction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        -400
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/escalate-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: '@openclaw use the exec tool to run: FORCE_ESCALATE=true ./skills/escalate-to-claude.sh ' + $('Parse Alerts').first().json.existingIssueId + ' \"Flapping K8s alert: ' + $('Parse Alerts').first().json.alertname + ' in ' + $('Parse Alerts').first().json.namespace + ' (flap count: ' + $('Parse Alerts').first().json.flapCount + '). Auto-escalating for root cause investigation.\"', format: 'org.matrix.custom.html', formatted_body: '<a href=\"https://matrix.to/#/@openclaw:matrix.example.net\">@openclaw</a> use the exec tool to run: <code>FORCE_ESCALATE=true ./skills/escalate-to-claude.sh ' + $('Parse Alerts').first().json.existingIssueId + ' \"Flapping K8s alert: ' + $('Parse Alerts').first().json.alertname + ' in ' + $('Parse Alerts').first().json.namespace + ' (flap count: ' + $('Parse Alerts').first().json.flapCount + '). Auto-escalating for root cause investigation.\"</code>', 'm.mentions': { user_ids: ['@openclaw:matrix.example.net'] } }) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond OK": {
+      "main": [
+        [
+          {
+            "node": "Load Prom Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Prom Alerts": {
+      "main": [
+        [
+          {
+            "node": "Parse Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alerts": {
+      "main": [
+        [
+          {
+            "node": "Save Prom Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Prom Alerts": {
+      "main": [
+        [
+          {
+            "node": "Has Alerts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Is Repeat?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Is Repeat?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Issue State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post to Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Matrix": {
+      "main": [
+        [
+          {
+            "node": "Is Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Alert?": {
+      "main": [
+        [
+          {
+            "node": "Should Triage?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Issue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Triage?": {
+      "main": [
+        [
+          {
+            "node": "Acquire Triage Lock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Acquire Triage Lock": {
+      "main": [
+        [
+          {
+            "node": "Lock OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock OK?": {
+      "main": [
+        [
+          {
+            "node": "Post Triage Instruction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Fetch Issue State": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Repeat Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Repeat Action": {
+      "main": [
+        [
+          {
+            "node": "Repeat Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repeat Action": {
+      "main": [
+        [
+          {
+            "node": "Post Re-alert Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move to Open",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post to Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Move to Open": {
+      "main": [
+        [
+          {
+            "node": "Post Reopen Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Reopen Comment": {
+      "main": [
+        [
+          {
+            "node": "Post to Matrix",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Should Escalate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Issue?": {
+      "main": [
+        [
+          {
+            "node": "Post Recovery Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Post Recovery Comment": {
+      "main": [
+        [
+          {
+            "node": "Is Last Recovery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Last Recovery?": {
+      "main": [
+        [
+          {
+            "node": "Move to Verify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Move to Verify": {
+      "main": [
+        [
+          {
+            "node": "Post All Clear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Re-alert Comment": {
+      "main": [
+        [
+          {
+            "node": "Should Escalate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Escalate?": {
+      "main": [
+        [
+          {
+            "node": "Post Escalation Instruction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "global": {
+      "activeAlerts": {
+        "KubePodNotReady:monitoring": {
+          "issueId": "IFRNLLEI01PRD-453",
+          "firstSeen": VMID_REDACTED5149,
+          "lastSeen": VMID_REDACTED9955,
+          "count": 2,
+          "flapCount": 0,
+          "registeredAt": VMID_REDACTED1971
+        },
+        "KubeDeploymentRolloutStuck:monitoring": {
+          "issueId": "IFRNLLEI01PRD-454",
+          "firstSeen": VMID_REDACTED9874,
+          "lastSeen": VMID_REDACTED9874,
+          "count": 1,
+          "flapCount": 0,
+          "registeredAt": VMID_REDACTED5859
+        },
+        "TargetDown:monitoring": {
+          "issueId": "IFRNLLEI01PRD-463",
+          "firstSeen": VMID_REDACTED6104,
+          "lastSeen": VMID_REDACTED6104,
+          "count": 1,
+          "flapCount": 0,
+          "registeredAt": VMID_REDACTED2887
+        }
+      },
+      "closedAlerts": {},
+      "currentBurst": {
+        "startTime": VMID_REDACTED6104,
+        "alerts": [
+          "TargetDown:monitoring"
+        ],
+        "fired": false
+      }
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "d7f4c3bf-6f6b-4bd0-9001-3fcc8854cf1d",
+  "activeVersionId": "d7f4c3bf-6f6b-4bd0-9001-3fcc8854cf1d",
+  "versionCounter": 500,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-14T20:10:21.658Z",
+      "createdAt": "2026-03-14T20:10:21.658Z",
+      "role": "workflow:owner",
+      "workflowId": "CqrN7hNiJsATcJGE",
+      "projectId": "CLDM2Ezgw9101HuF",
+      "project": {
+        "updatedAt": "2025-01-28T17:38:17.181Z",
+        "createdAt": "2025-01-28T17:31:03.531Z",
+        "id": "CLDM2Ezgw9101HuF",
+        "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-11T14:30:06.049Z",
+    "createdAt": "2026-04-11T14:30:06.049Z",
+    "versionId": "d7f4c3bf-6f6b-4bd0-9001-3fcc8854cf1d",
+    "workflowId": "CqrN7hNiJsATcJGE",
+    "nodes": [
+      {
+        "id": "webhook-trigger",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "prometheus-alert",
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "prometheus-alert",
+          "options": {},
+          "responseMode": "responseNode"
+        }
+      },
+      {
+        "id": "respond-ok",
+        "name": "Respond OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "OK"
+        }
+      },
+      {
+        "id": "load-prom-alerts",
+        "name": "Load Prom Alerts",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          440,
+          0
+        ],
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "parameters": {
+          "command": "cat /app/cubeos/claude-context/active-prom-alerts.json 2>/dev/null || echo '{}'; echo '---MAINT---'; cat /home/app-user/gateway.maintenance 2>/dev/null || echo 'NONE'",
+          "authentication": "privateKey"
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "parse-alerts",
+        "name": "Parse Alerts",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// \u2500\u2500\u2500 Maintenance mode check \u2500\u2500\u2500\nconst sshRaw = $input.first().json.stdout || '';\nconst maintSplit = sshRaw.split('---MAINT---');\nconst alertsJson = (maintSplit[0] || '').trim();\nconst maintRaw = (maintSplit[1] || 'NONE').trim();\n\nlet maintenanceActive = false;\nlet maintenanceInfo = null;\nif (maintRaw !== 'NONE' && maintRaw !== '') {\n  try {\n    maintenanceInfo = JSON.parse(maintRaw);\n    maintenanceActive = true;\n  } catch(e) {\n    maintenanceActive = true;\n    maintenanceInfo = { reason: maintRaw };\n  }\n}\n\nif (maintenanceActive) {\n  return [{ json: {\n    hasContent: false, isRepeat: false, isAlert: false, isRecovery: false,\n    isLastRecovery: false, hostname: '', ruleName: '',\n    alertsB64: '', existingIssueId: '', repeatAction: 'none', shouldEscalate: false,\n    flapCount: 0, isBurst: false, burstHosts: '', burstRules: '', burstSeverities: '',\n    maintenanceSuppressed: true, maintenanceReason: maintenanceInfo?.reason || 'scheduled'\n  }}];\n}\n// \u2500\u2500\u2500 End maintenance check \u2500\u2500\u2500\n\nconst webhookData = $('Respond OK').first().json;\n// sshData reconstructed from maintenance-aware SSH output split\nconst sshData = { stdout: alertsJson };\n\nlet body;\nif (webhookData.body && typeof webhookData.body === 'object' && webhookData.body.body) {\n  body = webhookData.body.body;\n} else if (webhookData.body && typeof webhookData.body === 'object') {\n  body = webhookData.body;\n} else {\n  body = webhookData;\n}\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch(e) { body = {}; }\n}\n\nconst sd = $getWorkflowStaticData('global');\nif (!sd.activeAlerts) sd.activeAlerts = {};\nif (!sd.closedAlerts) sd.closedAlerts = {};\nif (!sd.currentBurst) sd.currentBurst = { startTime: 0, alerts: [], fired: false };\n\nconst BURST_THRESHOLD = 3;\nconst BURST_WINDOW_MS = 300000;\nconst BURST_RESET_MS = 600000;\nconst CREATION_LOCK_MS = 60000;\nconst ACTIVE_TTL_MS = 7200000;\nconst RECOVERED_TTL_MS = 14400000;\nconst FLAPPING_EXTENDED_TTL_MS = VMID_REDACTED;\nconst CLOSED_COOLDOWN_MS = 300000;\nconst FLAP_ESCALATE_THRESHOLD = 2;\n\nif (Object.keys(sd.activeAlerts).length === 0) {\n  const sshOut = sshData.stdout || '';\n  if (sshOut.trim() && sshOut.trim() !== '{}') {\n    try {\n      const loaded = JSON.parse(sshOut.trim());\n      if (loaded && typeof loaded === 'object' && !Array.isArray(loaded)) {\n        sd.activeAlerts = loaded;\n      }\n    } catch(e) {}\n  }\n}\n\nif (body.action === 'register' && body.alertKey && body.issueId) {\n  const entry = sd.activeAlerts[body.alertKey];\n  if (entry) {\n    entry.issueId = body.issueId;\n    entry.registeredAt = Date.now();\n  } else {\n    sd.activeAlerts[body.alertKey] = {\n      issueId: body.issueId, registeredAt: Date.now(),\n      firstSeen: Date.now(), lastSeen: Date.now(), count: 1, flapCount: 0\n    };\n  }\n  const alertsB64 = Buffer.from(JSON.stringify(sd.activeAlerts)).toString('base64');\n  return [{ json: { hasContent: false, isRepeat: false, isAlert: false, isRecovery: false,\n    isLastRecovery: false, alertKey: body.alertKey, existingIssueId: body.issueId,\n    alertsB64, repeatAction: 'none', shouldTriage: false, shouldEscalate: false,\n    commentText: '', isBurst: false, burstAlertKeys: '', burstNamespaces: '',\n    flapCount: 0, expiredRecoveryIssues: '' } }];\n}\n\nconst alerts = body.alerts || [body];\nconst batchStatus = body.status || 'unknown';\nconst results = [];\n\nconst now0 = Date.now();\nif (sd.currentBurst.startTime && (now0 - sd.currentBurst.startTime > BURST_RESET_MS)) {\n  sd.currentBurst = { startTime: 0, alerts: [], fired: false };\n}\n\nconst processedRecoveries = new Set();\n\nfor (const alert of alerts) {\n  const labels = alert.labels || {};\n  const annotations = alert.annotations || {};\n  const alertStatus = alert.status || batchStatus;\n  const severity = labels.severity || 'unknown';\n  const alertname = labels.alertname || 'Unknown';\n  const namespace = labels.namespace || 'cluster-wide';\n  const pod = labels.pod || '';\n  const node = labels.node || labels.instance || '';\n  const summary = annotations.summary || annotations.description || alertname;\n\n  if (alertname === 'Watchdog' || alertname === 'InfoInhibitor' || severity === 'info') continue;\n\n  const isRecovery = alertStatus === 'resolved';\n  const isAlert = !isRecovery;\n  const hostname = node.replace(/:.*/, '').replace(/\\.example\\.net$/, '');\n  const alertKey = alertname + ':' + namespace;\n  const safeAlertname = alertname.replace(/[^a-zA-Z0-9_-]/g, '');\n  const safeSummary = summary.replace(/'/g, '').substring(0, 200);\n  const safeNamespace = (namespace || 'cluster-wide').replace(/[^a-zA-Z0-9_-]/g, '');\n  const safeNode = hostname.replace(/[^a-zA-Z0-9._-]/g, '');\n  const safePod = pod.replace(/[^a-zA-Z0-9._-]/g, '');\n\n  let isRepeat = false;\n  let existingIssueId = '';\n  let repeatAction = 'none';\n  let commentText = '';\n  let isLastRecovery = false;\n  let shouldTriage = false;\n  let shouldEscalate = false;\n  let flapCount = 0;\n\n  if (isAlert) {\n    if (sd.closedAlerts[alertKey]) {\n      if (Date.now() - sd.closedAlerts[alertKey] < CLOSED_COOLDOWN_MS) {\n        continue;\n      } else {\n        delete sd.closedAlerts[alertKey];\n      }\n    }\n\n    const entry = sd.activeAlerts[alertKey];\n    if (entry) {\n      existingIssueId = entry.issueId || '';\n      entry.lastSeen = Date.now();\n      entry.count = (entry.count || 1) + 1;\n\n      if (entry.recoveredAt) {\n        entry.flapCount = (entry.flapCount || 0) + 1;\n        delete entry.recoveredAt;\n      }\n      flapCount = entry.flapCount || 0;\n\n      if (existingIssueId) {\n        isRepeat = true;\n        repeatAction = 'check_yt';\n        commentText = 'Alert re-fired: ' + alertname + ' in ' + namespace +\n          ' at ' + new Date().toISOString() + ' (count: ' + entry.count +\n          (flapCount > 0 ? ', flap #' + flapCount : '') + ')';\n\n        if (flapCount >= FLAP_ESCALATE_THRESHOLD) {\n          // Fix C: Escalation cooldown \u2014 max 1 escalation per hour per alert\n          const lastEsc = entry.lastEscalatedAt || 0;\n          if (now - lastEsc >= 3600000) {\n            shouldEscalate = true;\n            entry.lastEscalatedAt = now;\n          } else {\n            shouldEscalate = false;\n            commentText += ' (escalation cooldown \\u2014 last escalated ' + Math.round((now - lastEsc) / 60000) + 'min ago)';\n          }\n        }\n      } else {\n        if (entry.firstSeen && (Date.now() - entry.firstSeen < CREATION_LOCK_MS)) {\n          continue;\n        }\n        isRepeat = false;\n        sd.activeAlerts[alertKey] = {\n          issueId: null, firstSeen: Date.now(), lastSeen: Date.now(),\n          count: 1, flapCount: entry.flapCount || 0\n        };\n      }\n    } else {\n      sd.activeAlerts[alertKey] = {\n        issueId: null, firstSeen: Date.now(), lastSeen: Date.now(),\n        count: 1, flapCount: 0\n      };\n    }\n\n    shouldTriage = !isRepeat;\n\n    if (!isRepeat) {\n      if (!sd.currentBurst.startTime) sd.currentBurst.startTime = Date.now();\n      if (!sd.currentBurst.alerts.includes(alertKey)) sd.currentBurst.alerts.push(alertKey);\n    }\n  }\n\n  if (isRecovery) {\n    if (processedRecoveries.has(alertKey)) continue;\n    processedRecoveries.add(alertKey);\n    // Fix E: Cross-execution dedup \u2014 skip if same alert resolved within 60s\n    const recoveryDedupKey = '__recovery_' + alertKey;\n    if (sd.activeAlerts[recoveryDedupKey] && (now0 - sd.activeAlerts[recoveryDedupKey] < 60000)) {\n      continue;\n    }\n    sd.activeAlerts[recoveryDedupKey] = now0;\n\n    const entry = sd.activeAlerts[alertKey];\n    if (entry) {\n      if (entry.recoveredAt) {\n        continue;\n      }\n      existingIssueId = entry.issueId || '';\n      flapCount = entry.flapCount || 0;\n\n      entry.recoveredAt = Date.now();\n\n      if (flapCount === 0) {\n        isLastRecovery = true;\n        commentText = 'Alert resolved: ' + alertname + ' in ' + namespace +\n          ' at ' + new Date().toISOString();\n      } else {\n        isLastRecovery = false;\n        commentText = 'Alert resolved: ' + alertname + ' in ' + namespace +\n          ' at ' + new Date().toISOString() +\n          ' (after ' + flapCount + ' flap(s) \\u2014 keeping issue open for review)';\n      }\n\n      sd.closedAlerts[alertKey] = Date.now();\n    }\n\n    const burstIdx = sd.currentBurst.alerts.indexOf(alertKey);\n    if (burstIdx !== -1) sd.currentBurst.alerts.splice(burstIdx, 1);\n  }\n\n  const now = Date.now();\n  const expiredRecoveryIssueIds = [];\n  for (const k of Object.keys(sd.activeAlerts)) {\n    const e = sd.activeAlerts[k];\n    if (e.recoveredAt) {\n      const ttl = (e.flapCount > 0) ? FLAPPING_EXTENDED_TTL_MS : RECOVERED_TTL_MS;\n      if (now - e.recoveredAt > ttl) {\n        if (e.issueId) expiredRecoveryIssueIds.push(e.issueId);\n        delete sd.activeAlerts[k];\n      }\n    } else if (e.lastSeen && (now - e.lastSeen > ACTIVE_TTL_MS)) {\n      delete sd.activeAlerts[k];\n    }\n  }\n  for (const k of Object.keys(sd.closedAlerts)) {\n    if (now - sd.closedAlerts[k] > 1800000) delete sd.closedAlerts[k];\n  }\n\n  let isBurst = false;\n  let burstAlertKeys = '';\n  let burstNamespaces = '';\n  if (isAlert && !sd.currentBurst.fired && sd.currentBurst.alerts.length >= BURST_THRESHOLD) {\n    isBurst = true;\n    sd.currentBurst.fired = true;\n    burstAlertKeys = sd.currentBurst.alerts.join(',');\n    const nsSet = new Set(sd.currentBurst.alerts.map(k => k.split(':').slice(1).join(':')));\n    burstNamespaces = [...nsSet].join(',');\n  }\n\n  const flapLabel = flapCount > 0 ? ' [FLAPPING x' + flapCount + ']' : '';\n  const escalateLabel = shouldEscalate ? ' \\u2b06\\ufe0f ESCALATING' : '';\n  const emoji = isRecovery ? '\\u2705' : (severity === 'critical' ? '\\ud83d\\udd34' : '\\ud83d\\udfe1');\n  const stateLabel = isRecovery ? 'RESOLVED' : 'ALERT';\n\n  const plainBody = emoji + ' [Prometheus] ' + stateLabel + ': ' + alertname +\n    ' (' + severity + ')' + flapLabel + escalateLabel + '\\n' +\n    'Namespace: ' + namespace + '\\n' +\n    (pod ? 'Pod: ' + pod + '\\n' : '') +\n    (hostname ? 'Node: ' + hostname + '\\n' : '') +\n    'Summary: ' + summary;\n\n  const htmlBody = '<b>' + emoji + ' [Prometheus] ' + stateLabel + ':</b> ' + alertname +\n    ' (<code>' + severity + '</code>)' +\n    (flapCount > 0 ? ' <b>[FLAPPING x' + flapCount + ']</b>' : '') +\n    (shouldEscalate ? ' <b>\\u2b06\\ufe0f ESCALATING</b>' : '') + '<br/>' +\n    'Namespace: ' + namespace + '<br/>' +\n    (pod ? 'Pod: <code>' + pod + '</code><br/>' : '') +\n    (hostname ? 'Node: <code>' + hostname + '</code><br/>' : '') +\n    'Summary: ' + summary;\n\n  const alertsB64 = Buffer.from(JSON.stringify(sd.activeAlerts)).toString('base64');\n\n  results.push({\n    json: {\n      alertname: safeAlertname, severity, namespace: safeNamespace, pod: safePod,\n      hostname: safeNode, summary: safeSummary, isRecovery, isAlert, stateLabel,\n      alertKey, plainBody, htmlBody,\n      matrixBody: JSON.stringify({\n        msgtype: isRecovery ? 'm.notice' : 'm.text',\n        body: plainBody, format: 'org.matrix.custom.html', formatted_body: htmlBody\n      }),\n      shouldTriage, shouldEscalate, hasContent: true, isRepeat, existingIssueId,\n      repeatAction, commentText, alertsB64, isLastRecovery, flapCount,\n      isBurst, burstAlertKeys, burstNamespaces,\n      expiredRecoveryIssues: expiredRecoveryIssueIds.join(',')\n    }\n  });\n}\n\nif (results.length === 0) {\n  const alertsB64 = Buffer.from(JSON.stringify(sd.activeAlerts)).toString('base64');\n  return [{ json: { hasContent: false, alertsB64, isBurst: false, burstAlertKeys: '',\n    burstNamespaces: '', expiredRecoveryIssues: '' } }];\n}\n\nreturn results;",
+          "mode": "runOnceForAllItems"
+        }
+      },
+      {
+        "id": "save-prom-alerts",
+        "name": "Save Prom Alerts",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          880,
+          0
+        ],
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "parameters": {
+          "command": "={{ \"echo '\" + $(\"Parse Alerts\").first().json.alertsB64 + \"' | base64 -d > /app/cubeos/claude-context/active-prom-alerts.json.tmp && mv /app/cubeos/claude-context/active-prom-alerts.json.tmp /app/cubeos/claude-context/active-prom-alerts.json\" + ($(\"Parse Alerts\").first().json.isRecovery ? \"; rmdir /tmp/prom-triage-lock-\" + $(\"Parse Alerts\").first().json.alertKey.replace(/[^a-zA-Z0-9_-]/g, \"_\") + \" 2>/dev/null; true\" : \"\") }}",
+          "authentication": "privateKey"
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "has-alerts",
+        "name": "Has Alerts?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1100,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "has-alerts-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Parse Alerts').first().json.hasContent }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "is-repeat",
+        "name": "Is Repeat?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1320,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "is-repeat-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Parse Alerts').first().json.isRepeat }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-to-matrix",
+        "name": "Post to Matrix",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1540,
+          200
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/prom-{{ Date.now() }}-{{ Math.random().toString(36).substr(2,6) }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ $('Parse Alerts').first().json.matrixBody }}",
+          "options": {}
+        },
+        "continueOnFail": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "id": "is-alert",
+        "name": "Is Alert?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1760,
+          200
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "is-alert-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Parse Alerts').first().json.isAlert }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "should-triage",
+        "name": "Should Triage?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1980,
+          100
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "should-triage-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Parse Alerts').first().json.shouldTriage }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "acquire-triage-lock",
+        "name": "Acquire Triage Lock",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          2200,
+          100
+        ],
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "parameters": {
+          "command": "={{ 'ALERT_KEY=\"' + $('Parse Alerts').first().json.alertKey.replace(/[^a-zA-Z0-9_:-]/g, '_') + '\"; LOCK_DIR=\"/tmp/prom-triage-lock-${ALERT_KEY}\"; if mkdir \"$LOCK_DIR\" 2>/dev/null; then echo \"PROCEED\"; (sleep 300 && rmdir \"$LOCK_DIR\" 2>/dev/null) </dev/null >/dev/null 2>&1 & else echo \"LOCKED\"; fi' }}",
+          "authentication": "privateKey"
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "lock-ok",
+        "name": "Lock OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2420,
+          100
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "lock-ok-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $json.stdout.includes('PROCEED') }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-triage-instruction",
+        "name": "Post Triage Instruction",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2640,
+          100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/triage-{{ Date.now() }}-{{ Math.random().toString(36).substr(2,6) }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: '@openclaw use the exec tool to run: ./skills/k8s-triage/k8s-triage.sh \"' + $('Parse Alerts').first().json.alertname + '\" \"' + $('Parse Alerts').first().json.severity + '\" \"' + $('Parse Alerts').first().json.namespace + '\" \"' + $('Parse Alerts').first().json.summary.substring(0,100) + '\" \"' + $('Parse Alerts').first().json.hostname + '\" \"' + $('Parse Alerts').first().json.pod + '\"', format: 'org.matrix.custom.html', formatted_body: '<a href=\"https://matrix.to/#/@openclaw:matrix.example.net\">@openclaw</a> <strong>Investigating:</strong> <code>' + $('Parse Alerts').first().json.alertname + '</code><br><small>' + ($('Parse Alerts').first().json.namespace || '') + ' | ' + $('Parse Alerts').first().json.severity + ($('Parse Alerts').first().json.hostname ? ' | ' + $('Parse Alerts').first().json.hostname : '') + '</small><br><code>k8s-triage.sh \"' + $('Parse Alerts').first().json.alertname + '\"</code>', 'm.mentions': { user_ids: ['@openclaw:matrix.example.net'] } }) }}",
+          "options": {}
+        },
+        "continueOnFail": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "id": "fetch-issue-state",
+        "name": "Fetch Issue State",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1540,
+          -200
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}?fields=id,idReadable,customFields(name,value(name))",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "continueOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        }
+      },
+      {
+        "id": "evaluate-repeat-action",
+        "name": "Evaluate Repeat Action",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          -200
+        ],
+        "parameters": {
+          "jsCode": "const parseAlert = $('Parse Alerts').first().json;\nconst ytResponse = $input.first().json;\n\nlet repeatAction = 'comment';\nlet ytState = 'unknown';\n\ntry {\n  const customFields = ytResponse.customFields || [];\n  const stateField = customFields.find(f => f.name === 'State');\n  if (stateField && stateField.value) {\n    ytState = stateField.value.name || 'unknown';\n  }\n} catch(e) {\n  ytState = 'unknown';\n}\n\nif (!ytResponse.id && !ytResponse.idReadable) {\n  repeatAction = 'new';\n} else if (ytState === 'Done' || ytState === 'Cancelled' || ytState === 'Duplicate') {\n  repeatAction = 'new';\n  const sd = $getWorkflowStaticData('global');\n  if (sd.activeAlerts && sd.activeAlerts[parseAlert.alertKey]) {\n    sd.activeAlerts[parseAlert.alertKey].issueId = null;\n  }\n} else if (ytState === 'To Verify') {\n  repeatAction = 'reopen';\n} else {\n  repeatAction = 'comment';\n}\n\nconst shouldEscalate = parseAlert.shouldEscalate || false;\nconst flapCount = parseAlert.flapCount || 0;\n\nreturn [{ json: { ...parseAlert, repeatAction, ytState, shouldEscalate, flapCount } }];",
+          "mode": "runOnceForAllItems"
+        }
+      },
+      {
+        "id": "repeat-action-switch",
+        "name": "Repeat Action",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          1980,
+          -200
+        ],
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "outputKey": "comment",
+                "conditions": {
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.repeatAction }}",
+                      "rightValue": "comment",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "caseSensitive": true
+                      }
+                    }
+                  ],
+                  "options": {
+                    "version": 2,
+                    "caseSensitive": true,
+                    "typeValidation": "strict"
+                  }
+                }
+              },
+              {
+                "outputKey": "reopen",
+                "conditions": {
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.repeatAction }}",
+                      "rightValue": "reopen",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "caseSensitive": true
+                      }
+                    }
+                  ],
+                  "options": {
+                    "version": 2,
+                    "caseSensitive": true,
+                    "typeValidation": "strict"
+                  }
+                }
+              },
+              {
+                "outputKey": "new",
+                "conditions": {
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.repeatAction }}",
+                      "rightValue": "new",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "caseSensitive": true
+                      }
+                    }
+                  ],
+                  "options": {
+                    "version": 2,
+                    "caseSensitive": true,
+                    "typeValidation": "strict"
+                  }
+                }
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "post-realert-comment",
+        "name": "Post Re-alert Comment",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2200,
+          -300
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}/comments",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: $('Parse Alerts').first().json.commentText }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "continueOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "id": "move-to-open",
+        "name": "Move to Open",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2200,
+          -500
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/commands",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Alerts').first().json.existingIssueId }], query: 'state Open' }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "continueOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        }
+      },
+      {
+        "id": "post-reopen-comment",
+        "name": "Post Reopen Comment",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2420,
+          -500
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}/comments",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: 'Alert re-fired after To Verify. Reopening. ' + $('Parse Alerts').first().json.commentText }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "continueOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "id": "has-issue",
+        "name": "Has Issue?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1980,
+          400
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "has-issue-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Parse Alerts').first().json.existingIssueId !== '' }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-recovery-comment",
+        "name": "Post Recovery Comment",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2200,
+          400
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alerts').first().json.existingIssueId }}/comments",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: $('Parse Alerts').first().json.commentText }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "continueOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "id": "is-last-recovery",
+        "name": "Is Last Recovery?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2420,
+          400
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "is-last-recovery-c",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $('Parse Alerts').first().json.isLastRecovery }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "move-to-verify",
+        "name": "Move to Verify",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2640,
+          350
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/commands",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Alerts').first().json.existingIssueId }], query: 'state To Verify' }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "continueOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        }
+      },
+      {
+        "id": "post-all-clear",
+        "name": "Post All Clear",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2860,
+          350
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/allclear-{{ Date.now() }}-{{ Math.random().toString(36).substr(2,6) }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: '\\u2705 [Prometheus] All clear: ' + $('Parse Alerts').first().json.alertKey + ' \u2014 issue ' + $('Parse Alerts').first().json.existingIssueId + ' moved to To Verify', format: 'org.matrix.custom.html', formatted_body: '<b>\\u2705 [Prometheus] All clear:</b> ' + $('Parse Alerts').first().json.alertKey + ' \u2014 issue <code>' + $('Parse Alerts').first().json.existingIssueId + '</code> moved to To Verify' }) }}",
+          "options": {}
+        },
+        "continueOnFail": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "id": "should-escalate-repeat",
+        "name": "Should Escalate?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2640,
+          -300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "escalate-check",
+                "leftValue": "={{ $('Parse Alerts').first().json.shouldEscalate }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "post-escalation-instruction",
+        "name": "Post Escalation Instruction",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2860,
+          -400
+        ],
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/escalate-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: '@openclaw use the exec tool to run: FORCE_ESCALATE=true ./skills/escalate-to-claude.sh ' + $('Parse Alerts').first().json.existingIssueId + ' \"Flapping K8s alert: ' + $('Parse Alerts').first().json.alertname + ' in ' + $('Parse Alerts').first().json.namespace + ' (flap count: ' + $('Parse Alerts').first().json.flapCount + '). Auto-escalating for root cause investigation.\"', format: 'org.matrix.custom.html', formatted_body: '<a href=\"https://matrix.to/#/@openclaw:matrix.example.net\">@openclaw</a> use the exec tool to run: <code>FORCE_ESCALATE=true ./skills/escalate-to-claude.sh ' + $('Parse Alerts').first().json.existingIssueId + ' \"Flapping K8s alert: ' + $('Parse Alerts').first().json.alertname + ' in ' + $('Parse Alerts').first().json.namespace + ' (flap count: ' + $('Parse Alerts').first().json.flapCount + '). Auto-escalating for root cause investigation.\"</code>', 'm.mentions': { user_ids: ['@openclaw:matrix.example.net'] } }) }}"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      }
+    ],
+    "connections": {
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Respond OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond OK": {
+        "main": [
+          [
+            {
+              "node": "Load Prom Alerts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Prom Alerts": {
+        "main": [
+          [
+            {
+              "node": "Parse Alerts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Alerts": {
+        "main": [
+          [
+            {
+              "node": "Save Prom Alerts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save Prom Alerts": {
+        "main": [
+          [
+            {
+              "node": "Has Alerts?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Alerts?": {
+        "main": [
+          [
+            {
+              "node": "Is Repeat?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Is Repeat?": {
+        "main": [
+          [
+            {
+              "node": "Fetch Issue State",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Post to Matrix",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post to Matrix": {
+        "main": [
+          [
+            {
+              "node": "Is Alert?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Alert?": {
+        "main": [
+          [
+            {
+              "node": "Should Triage?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Has Issue?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Triage?": {
+        "main": [
+          [
+            {
+              "node": "Acquire Triage Lock",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Acquire Triage Lock": {
+        "main": [
+          [
+            {
+              "node": "Lock OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Lock OK?": {
+        "main": [
+          [
+            {
+              "node": "Post Triage Instruction",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Fetch Issue State": {
+        "main": [
+          [
+            {
+              "node": "Evaluate Repeat Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Evaluate Repeat Action": {
+        "main": [
+          [
+            {
+              "node": "Repeat Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Repeat Action": {
+        "main": [
+          [
+            {
+              "node": "Post Re-alert Comment",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Move to Open",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Post to Matrix",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Move to Open": {
+        "main": [
+          [
+            {
+              "node": "Post Reopen Comment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Reopen Comment": {
+        "main": [
+          [
+            {
+              "node": "Post to Matrix",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Should Escalate?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Issue?": {
+        "main": [
+          [
+            {
+              "node": "Post Recovery Comment",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Post Recovery Comment": {
+        "main": [
+          [
+            {
+              "node": "Is Last Recovery?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Last Recovery?": {
+        "main": [
+          [
+            {
+              "node": "Move to Verify",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Move to Verify": {
+        "main": [
+          [
+            {
+              "node": "Post All Clear",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Re-alert Comment": {
+        "main": [
+          [
+            {
+              "node": "Should Escalate?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Escalate?": {
+        "main": [
+          [
+            {
+              "node": "Post Escalation Instruction",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Redrick Schuhart",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-11T14:30:06.149Z",
+        "id": 2159,
+        "workflowId": "CqrN7hNiJsATcJGE",
+        "versionId": "d7f4c3bf-6f6b-4bd0-9001-3fcc8854cf1d",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-04-11T14:30:06.113Z",
+        "id": 2158,
+        "workflowId": "CqrN7hNiJsATcJGE",
+        "versionId": "d7f4c3bf-6f6b-4bd0-9001-3fcc8854cf1d",
+        "event": "deactivated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    ]
+  }
+}
