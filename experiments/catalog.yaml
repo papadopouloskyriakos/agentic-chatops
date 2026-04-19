@@ -1,0 +1,620 @@
+# Chaos Engineering Experiment Catalog
+# Declarative format compatible with Chaos Toolkit (CT-1) and Azure Chaos Studio (AZ-1)
+# Replaces hardcoded BASELINE_TEST_MATRIX and CHAOS_TUNNELS Python dicts
+#
+# Schema: experiments/schema.json
+# Loader: scripts/chaos_catalog.py
+
+version: "1.0"
+
+# CT: Business alignment (contributions model)
+contributions:
+  reliability: "high"
+  availability: "high"
+  performance: "medium"
+  security: "none"
+
+# AZ: Target capability registration
+targets:
+  - id: nl-fw01
+    type: asa-firewall
+    site: NL
+    capabilities:
+      - tunnel-shutdown
+      - shun-clear
+      - bgp-peer
+    access:
+      method: ssh
+      user: operator
+      host: "10.0.181.X"
+      key_algo: ssh-rsa
+
+  - id: gr-fw01
+    type: asa-firewall
+    site: GR
+    capabilities:
+      - tunnel-shutdown
+      - shun-clear
+      - bgp-peer
+    access:
+      method: ssh-stepstone
+      via: gr-pve01
+      user: operator
+      host: "10.0.X.X"
+
+  - id: nl-dmz01
+    type: proxmox-vm
+    site: NL
+    vmid: VMID_REDACTED
+    capabilities:
+      - nic-disconnect
+      - container-stop
+    access:
+      method: ssh
+      user: operator
+      host: nl-dmz01
+
+  - id: gr-dmz01
+    type: proxmox-vm
+    site: GR
+    vmid: 201121301
+    capabilities:
+      - nic-disconnect
+      - container-stop
+    access:
+      method: ssh
+      user: operator
+      host: gr-dmz01
+
+  - id: notrf01vps01
+    type: vps-strongswan
+    site: "NO"
+    capabilities:
+      - swanctl-terminate
+      - tc-netem
+    access:
+      method: ssh
+      user: operator
+      host: "198.51.100.X"
+      key: ~/.ssh/one_key
+
+  - id: chzrh01vps01
+    type: vps-strongswan
+    site: CH
+    capabilities:
+      - swanctl-terminate
+      - tc-netem
+    access:
+      method: ssh
+      user: operator
+      host: "198.51.100.X"
+      key: ~/.ssh/one_key
+
+# Domain SLOs (referenced by experiments)
+domain_slos:
+  "kyriakos.papadopoulos.tech": {availability: 99.9, max_latency_ms: 500}
+  "get.cubeos.app": {availability: 99.9, max_latency_ms: 500}
+  "meshsat.net": {availability: 99.9, max_latency_ms: 500}
+  "mulecube.com": {availability: 99.9, max_latency_ms: 500}
+  "hub.meshsat.net": {availability: 99.5, max_latency_ms: 1000}
+
+# Experiment definitions
+experiments:
+  # ---- Tunnel Failover (wan-failover category) ----
+
+  - id: tunnel-nl-gr-freedom
+    title: "NL-GR Freedom VTI Kill"
+    description: "Shut down Tunnel4 (NL-GR Freedom), verify BGP failover to xs4all within 30s"
+    category: wan-failover
+    steady_state_hypothesis:
+      title: "5 HTTP domains reachable, 22+ BGP peers established"
+      probes:
+        - {type: http, targets: ["kyriakos.papadopoulos.tech", "get.cubeos.app", "meshsat.net", "mulecube.com", "hub.meshsat.net"], tolerance: {min_ok: 5}}
+        - {type: prometheus, query: "count(frr_bgp_peer_state{state='established'})", tolerance: {range: [20, 30]}}
+        - {type: vti-ping, targets: ["10.255.200.X"], tolerance: {reachable: true}}
+    method:
+      - type: asa-tunnel-shutdown
+        target: nl-fw01
+        interface: Tunnel4
+        tunnel_pair: ["NL \u2194 GR", "freedom"]
+    rollbacks:
+      - type: asa-tunnel-noshut
+        target: nl-fw01
+        interface: Tunnel4
+    safety:
+      requires_backup: [["NL \u2194 GR", "xs4all"]]
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      target_availability: 99.95
+      max_convergence_seconds: 30
+      max_mttd_seconds: 5
+    schedule:
+      frequency: weekly
+      tier: primary
+    runbook_ref: "docs/runbooks/tunnel-failover.md#nl-gr-freedom"
+
+  - id: tunnel-nl-no-freedom
+    title: "NL-NO Freedom VTI Kill"
+    description: "Shut down Tunnel5, verify VPS NO transit via xs4all or GR relay"
+    category: wan-failover
+    steady_state_hypothesis:
+      title: "HTTP reachable, BGP peers stable"
+      probes:
+        - {type: http, targets: ["kyriakos.papadopoulos.tech", "get.cubeos.app"], tolerance: {min_ok: 2}}
+    method:
+      - type: asa-tunnel-shutdown
+        target: nl-fw01
+        interface: Tunnel5
+        tunnel_pair: ["NL \u2194 NO", "freedom"]
+    rollbacks:
+      - type: asa-tunnel-noshut
+        target: nl-fw01
+        interface: Tunnel5
+    safety:
+      requires_backup: []
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      max_convergence_seconds: 30
+    schedule:
+      frequency: monthly
+      tier: secondary
+
+  - id: tunnel-nl-ch-freedom
+    title: "NL-CH Freedom VTI Kill"
+    description: "Shut down Tunnel6, verify VPS CH transit via xs4all or GR relay"
+    category: wan-failover
+    method:
+      - type: asa-tunnel-shutdown
+        target: nl-fw01
+        interface: Tunnel6
+        tunnel_pair: ["NL \u2194 CH", "freedom"]
+    rollbacks:
+      - type: asa-tunnel-noshut
+        target: nl-fw01
+        interface: Tunnel6
+    safety:
+      requires_backup: []
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      max_convergence_seconds: 30
+    schedule:
+      frequency: monthly
+      tier: secondary
+
+  - id: tunnel-gr-no-inalan
+    title: "GR-NO Inalan VTI Kill"
+    description: "Shut down GR Tunnel2, verify transit via NL relay"
+    category: wan-failover
+    method:
+      - type: asa-tunnel-shutdown
+        target: gr-fw01
+        interface: Tunnel2
+        tunnel_pair: ["GR \u2194 NO", "inalan"]
+    rollbacks:
+      - type: asa-tunnel-noshut
+        target: gr-fw01
+        interface: Tunnel2
+    safety:
+      requires_backup: []
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      max_convergence_seconds: 45
+    schedule:
+      frequency: monthly
+      tier: secondary
+
+  - id: tunnel-gr-ch-inalan
+    title: "GR-CH Inalan VTI Kill"
+    description: "Shut down GR Tunnel3, verify transit via NL relay"
+    category: wan-failover
+    method:
+      - type: asa-tunnel-shutdown
+        target: gr-fw01
+        interface: Tunnel3
+        tunnel_pair: ["GR \u2194 CH", "inalan"]
+    rollbacks:
+      - type: asa-tunnel-noshut
+        target: gr-fw01
+        interface: Tunnel3
+    safety:
+      requires_backup: []
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      max_convergence_seconds: 60
+    schedule:
+      frequency: monthly
+      tier: secondary
+
+  # ---- DMZ Container Chaos ----
+
+  - id: dmz-nl-all-containers
+    title: "NL DMZ All Containers Kill"
+    description: "Stop all 4 web containers on nl-dmz01, verify GR mirror serves traffic"
+    category: dmz-failover
+    method:
+      - type: docker-compose-stop
+        target: nl-dmz01
+        services: [portfolio, cubeos-website, meshsat-website, mulecube]
+    rollbacks:
+      - type: docker-compose-start
+        target: nl-dmz01
+        services: [portfolio, cubeos-website, meshsat-website, mulecube]
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+      excluded_containers: [meshsat-mariadb, meshsat-hub, meshsat-garbd]
+    slo:
+      max_convergence_seconds: 120
+    schedule:
+      frequency: monthly
+      tier: secondary
+
+  - id: dmz-gr-all-containers
+    title: "GR DMZ All Containers Kill"
+    description: "Stop all 4 web containers on gr-dmz01, verify NL serves traffic"
+    category: dmz-failover
+    method:
+      - type: docker-compose-stop
+        target: gr-dmz01
+        services: [portfolio, cubeos-website, meshsat-website, mulecube]
+    rollbacks:
+      - type: docker-compose-start
+        target: gr-dmz01
+        services: [portfolio, cubeos-website, meshsat-website, mulecube]
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      max_convergence_seconds: 120
+    schedule:
+      frequency: monthly
+      tier: secondary
+
+  - id: dmz-nl-single-portfolio
+    title: "NL Portfolio Container Kill"
+    description: "Stop only portfolio container on NL, verify GR mirror"
+    category: dmz-failover
+    method:
+      - type: docker-compose-stop
+        target: nl-dmz01
+        services: [portfolio]
+    rollbacks:
+      - type: docker-compose-start
+        target: nl-dmz01
+        services: [portfolio]
+    safety:
+      max_duration: 300
+    slo:
+      max_convergence_seconds: 60
+    schedule:
+      frequency: quarterly
+      tier: tertiary
+
+  # ---- ISP-Level Degradation (tc netem) ----
+
+  - id: wan-latency-freedom-200ms
+    title: "Freedom WAN 200ms Latency Injection"
+    description: "Inject 200ms+50ms jitter on Freedom VTI via tc netem on VPS"
+    category: wan-degradation
+    steady_state_hypothesis:
+      title: "HTTP p95 latency < 500ms, BGP peers stable"
+      probes:
+        - {type: http, targets: ["kyriakos.papadopoulos.tech"], tolerance: {min_ok: 1}}
+        - {type: prometheus, query: "count(frr_bgp_peer_state{state='established'})", tolerance: {range: [20, 30]}}
+    method:
+      - type: tc-netem
+        target: notrf01vps01
+        interface: xfrm-nl-f
+        params: {delay_ms: 200, jitter_ms: 50}
+    rollbacks:
+      - type: tc-netem-clear
+        target: notrf01vps01
+        interface: xfrm-nl-f
+    safety:
+      max_duration: 300
+      abort_threshold: {all_http_fail_seconds: 30}
+    slo:
+      max_latency_increase_pct: 100
+    schedule:
+      frequency: quarterly
+      tier: tertiary
+    runbook_ref: "docs/runbooks/isp-degradation-response.md"
+
+  - id: wan-packetloss-freedom-10pct
+    title: "Freedom WAN 10% Packet Loss Injection"
+    description: "Inject 10% packet loss on Freedom VTI via tc netem on VPS"
+    category: wan-degradation
+    method:
+      - type: tc-netem
+        target: notrf01vps01
+        interface: xfrm-nl-f
+        params: {loss_percent: 10}
+    rollbacks:
+      - type: tc-netem-clear
+        target: notrf01vps01
+        interface: xfrm-nl-f
+    safety:
+      max_duration: 300
+      abort_threshold: {all_http_fail_seconds: 30}
+    schedule:
+      frequency: quarterly
+      tier: tertiary
+
+  # ---- Multi-Fault (parallel branches) ----
+
+  - id: combined-nl-gr-plus-dmz
+    title: "NL-GR Tunnel + NL DMZ Kill (worst-case)"
+    description: "Simultaneous tunnel kill and container stop using parallel branches"
+    category: multi-fault
+    method:
+      steps:
+        - name: "Inject network + container faults simultaneously"
+          branches:
+            - name: tunnel-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel4
+                  tunnel_pair: ["NL \u2194 GR", "freedom"]
+            - name: container-kill
+              actions:
+                - type: docker-compose-stop
+                  target: nl-dmz01
+                  services: [portfolio, cubeos-website, meshsat-website, mulecube]
+    rollbacks:
+      - type: asa-tunnel-noshut
+        target: nl-fw01
+        interface: Tunnel4
+      - type: docker-compose-start
+        target: nl-dmz01
+        services: [portfolio, cubeos-website, meshsat-website, mulecube]
+    safety:
+      requires_backup: [["NL \u2194 GR", "xs4all"]]
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      max_convergence_seconds: 120
+    schedule:
+      frequency: semi-annually
+      tier: game-day
+    runbook_ref: "docs/runbooks/combined-failure-response.md"
+
+  # ---- Site Isolation (annual game day) ----
+
+  - id: site-isolation-gr
+    title: "Full GR Site Isolation"
+    description: "Kill all tunnels to GR (NL-GR + GR-NO + GR-CH), verify NL services unaffected"
+    category: site-isolation
+    method:
+      steps:
+        - name: "Isolate GR from mesh"
+          branches:
+            - name: nl-gr-tunnel
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel4
+                  tunnel_pair: ["NL \u2194 GR", "freedom"]
+            - name: gr-no-tunnel
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: gr-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["GR \u2194 NO", "inalan"]
+            - name: gr-ch-tunnel
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: gr-fw01
+                  interface: Tunnel3
+                  tunnel_pair: ["GR \u2194 CH", "inalan"]
+    rollbacks:
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel4}
+      - {type: asa-tunnel-noshut, target: gr-fw01, interface: Tunnel2}
+      - {type: asa-tunnel-noshut, target: gr-fw01, interface: Tunnel3}
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+    slo:
+      nl_services_unaffected: true
+      max_convergence_seconds: 90
+    schedule:
+      frequency: annually
+      tier: game-day
+    runbook_ref: "docs/runbooks/combined-failure-response.md#site-isolation"
+
+  # ---- Golden ratio scenarios (graph connectivity validated) ----
+  # 29 safe combinations across kill 1-4. These are the most interesting
+  # multi-kill scenarios beyond the single-tunnel baselines.
+
+  - id: cross-site-nl-no-gr-ch
+    title: "Cross-Site: NL-NO + GR-CH Kill"
+    description: "Kill one tunnel from each site. NO reaches GR, CH reaches NL. Tests cross-site independence."
+    category: multi-fault
+    method:
+      steps:
+        - name: "Kill both cross-site tunnels"
+          branches:
+            - name: nl-no-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["NL \u2194 NO", "xs4all"]
+            - name: gr-ch-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: gr-fw01
+                  interface: Tunnel3
+                  tunnel_pair: ["GR \u2194 CH", "inalan"]
+    rollbacks:
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel2}
+      - {type: asa-tunnel-noshut, target: gr-fw01, interface: Tunnel3}
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+      graph_connectivity: true
+    slo:
+      max_convergence_seconds: 60
+    schedule:
+      frequency: quarterly
+      tier: secondary
+
+  - id: vps-isolate-no
+    title: "VPS Isolate NO (kill NL-NO + GR-NO)"
+    description: "Cut all direct paths to NO VPS. NO reaches sites only via CH transit (NO-CH always up)."
+    category: multi-fault
+    method:
+      steps:
+        - name: "Isolate NO from both sites"
+          branches:
+            - name: nl-no-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["NL \u2194 NO", "xs4all"]
+            - name: gr-no-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: gr-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["GR \u2194 NO", "inalan"]
+    rollbacks:
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel2}
+      - {type: asa-tunnel-noshut, target: gr-fw01, interface: Tunnel2}
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+      graph_connectivity: true
+    slo:
+      max_convergence_seconds: 90
+    schedule:
+      frequency: quarterly
+      tier: secondary
+
+  - id: vps-isolate-ch
+    title: "VPS Isolate CH (kill NL-CH + GR-CH)"
+    description: "Cut all direct paths to CH VPS. CH reaches sites only via NO transit (NO-CH always up)."
+    category: multi-fault
+    method:
+      steps:
+        - name: "Isolate CH from both sites"
+          branches:
+            - name: nl-ch-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel3
+                  tunnel_pair: ["NL \u2194 CH", "xs4all"]
+            - name: gr-ch-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: gr-fw01
+                  interface: Tunnel3
+                  tunnel_pair: ["GR \u2194 CH", "inalan"]
+    rollbacks:
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel3}
+      - {type: asa-tunnel-noshut, target: gr-fw01, interface: Tunnel3}
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+      graph_connectivity: true
+    slo:
+      max_convergence_seconds: 90
+    schedule:
+      frequency: quarterly
+      tier: secondary
+
+  - id: site-isolation-nl
+    title: "Full NL Site Isolation (kill 3)"
+    description: "Kill NL-GR + NL-NO + NL-CH. NL completely disconnected. Both VPS reach GR only."
+    category: site-isolation
+    method:
+      steps:
+        - name: "Isolate NL from mesh"
+          branches:
+            - name: nl-gr-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel1
+                  tunnel_pair: ["NL \u2194 GR", "xs4all"]
+            - name: nl-no-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["NL \u2194 NO", "xs4all"]
+            - name: nl-ch-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel3
+                  tunnel_pair: ["NL \u2194 CH", "xs4all"]
+    rollbacks:
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel1}
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel2}
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel3}
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+      graph_connectivity: true
+    slo:
+      gr_services_unaffected: true
+      max_convergence_seconds: 90
+    schedule:
+      frequency: annually
+      tier: game-day
+
+  - id: golden-ratio-max-kill-keep-gr-ch
+    title: "Golden Ratio Max Kill (keep GR-CH only)"
+    description: "Kill 4/5 chaosable tunnels. Only GR-CH survives. CH reaches GR directly, NO transits via CH."
+    category: site-isolation
+    method:
+      steps:
+        - name: "Maximum tunnel destruction"
+          branches:
+            - name: nl-gr-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel1
+                  tunnel_pair: ["NL \u2194 GR", "xs4all"]
+            - name: nl-no-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["NL \u2194 NO", "xs4all"]
+            - name: nl-ch-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: nl-fw01
+                  interface: Tunnel3
+                  tunnel_pair: ["NL \u2194 CH", "xs4all"]
+            - name: gr-no-kill
+              actions:
+                - type: asa-tunnel-shutdown
+                  target: gr-fw01
+                  interface: Tunnel2
+                  tunnel_pair: ["GR \u2194 NO", "inalan"]
+    rollbacks:
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel1}
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel2}
+      - {type: asa-tunnel-noshut, target: nl-fw01, interface: Tunnel3}
+      - {type: asa-tunnel-noshut, target: gr-fw01, interface: Tunnel2}
+    safety:
+      max_duration: 600
+      abort_threshold: {all_http_fail_seconds: 60}
+      graph_connectivity: true
+    slo:
+      max_convergence_seconds: 120
+    schedule:
+      frequency: annually
+      tier: game-day
+    runbook_ref: "docs/runbooks/combined-failure-response.md#golden-ratio"

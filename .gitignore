@@ -1,0 +1,33 @@
+.env
+node_modules/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Agent runtime artifacts
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Eval result snapshots (point-in-time, regenerated per run)
+docs/hard-eval-results-*.json
+
+# Session-produced reports (audit / remediation / push summaries)
+docs/*-final-*.md
+docs/*-remediation-report-*.md
+docs/*-remediation-scorecard-*.md
+docs/*-audit-*.md
+docs/contingency-plan.md
+docs/exercise-program.md
+
+# Large reference PDFs / slide decks (not suitable for repo)
+docs/*.pdf
+docs/*.pptx
+
+# Visual audit Playwright runtime output
+test-results/
+visual-audit/test-results/
+visual-audit/report/
+visual-audit/baselines/
+visual-audit/comparison/
+visual-audit/improved/
