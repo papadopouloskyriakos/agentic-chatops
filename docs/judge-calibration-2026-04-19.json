@@ -1,0 +1,749 @@
+{
+  "run_at": "2026-04-19T00:14:03.573073Z",
+  "haiku_model": "claude-haiku-4-5-20251001",
+  "local_model": "gemma3:12b",
+  "local_fallback": "qwen2.5:7b",
+  "cases_total": 60,
+  "cases_complete": 60,
+  "agreement_rate": 0.85,
+  "false_positives": 6,
+  "false_negatives": 3,
+  "haiku_hit_rate": 0.8667,
+  "local_hit_rate": 0.9167,
+  "per_category": {
+    "multi-hop": {
+      "n": 4,
+      "agree": 4
+    },
+    "symptom-to-root": {
+      "n": 1,
+      "agree": 1
+    },
+    "oblique-phrase": {
+      "n": 1,
+      "agree": 1
+    },
+    "specific-cmd": {
+      "n": 2,
+      "agree": 2
+    },
+    "timeboxed": {
+      "n": 1,
+      "agree": 1
+    },
+    "similar-hostnames": {
+      "n": 1,
+      "agree": 1
+    },
+    "negation": {
+      "n": 1,
+      "agree": 1
+    },
+    "abbreviation": {
+      "n": 1,
+      "agree": 1
+    },
+    "cross-signal": {
+      "n": 1,
+      "agree": 0
+    },
+    "corroboration": {
+      "n": 2,
+      "agree": 2
+    },
+    "policy": {
+      "n": 3,
+      "agree": 2
+    },
+    "obscure": {
+      "n": 1,
+      "agree": 1
+    },
+    "causal-ambiguity": {
+      "n": 1,
+      "agree": 1
+    },
+    "recency": {
+      "n": 2,
+      "agree": 2
+    },
+    "metric-recall": {
+      "n": 1,
+      "agree": 1
+    },
+    "silent-failure": {
+      "n": 1,
+      "agree": 1
+    },
+    "subtle-distinction": {
+      "n": 1,
+      "agree": 1
+    },
+    "cost": {
+      "n": 1,
+      "agree": 1
+    },
+    "meta": {
+      "n": 4,
+      "agree": 3
+    },
+    "specific-incident": {
+      "n": 3,
+      "agree": 2
+    },
+    "config": {
+      "n": 1,
+      "agree": 1
+    },
+    "hostname-chain": {
+      "n": 1,
+      "agree": 1
+    },
+    "oblique": {
+      "n": 3,
+      "agree": 3
+    },
+    "architecture": {
+      "n": 4,
+      "agree": 4
+    },
+    "operational": {
+      "n": 1,
+      "agree": 0
+    },
+    "ops": {
+      "n": 1,
+      "agree": 1
+    },
+    "diagnostic": {
+      "n": 1,
+      "agree": 1
+    },
+    "ops-policy": {
+      "n": 1,
+      "agree": 1
+    },
+    "monitoring": {
+      "n": 1,
+      "agree": 1
+    },
+    "specific-value": {
+      "n": 1,
+      "agree": 0
+    },
+    "hostname-specific": {
+      "n": 1,
+      "agree": 1
+    },
+    "synthesis": {
+      "n": 1,
+      "agree": 1
+    },
+    "kg": {
+      "n": 10,
+      "agree": 7
+    }
+  },
+  "per_case": [
+    {
+      "id": "H01",
+      "category": "multi-hop",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 10.47
+    },
+    {
+      "id": "H02",
+      "category": "symptom-to-root",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 11.45
+    },
+    {
+      "id": "H03",
+      "category": "multi-hop",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 5,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.8
+    },
+    {
+      "id": "H04",
+      "category": "oblique-phrase",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.82
+    },
+    {
+      "id": "H05",
+      "category": "specific-cmd",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.98
+    },
+    {
+      "id": "H06",
+      "category": "timeboxed",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.65
+    },
+    {
+      "id": "H07",
+      "category": "similar-hostnames",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.88
+    },
+    {
+      "id": "H08",
+      "category": "negation",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.49
+    },
+    {
+      "id": "H09",
+      "category": "abbreviation",
+      "haiku_hit": true,
+      "haiku_cov": 4,
+      "local_hit": true,
+      "local_cov": 4,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.88
+    },
+    {
+      "id": "H10",
+      "category": "cross-signal",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.53
+    },
+    {
+      "id": "H11",
+      "category": "corroboration",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 2.12
+    },
+    {
+      "id": "H12",
+      "category": "policy",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.46
+    },
+    {
+      "id": "H13",
+      "category": "obscure",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.86
+    },
+    {
+      "id": "H14",
+      "category": "causal-ambiguity",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.75
+    },
+    {
+      "id": "H15",
+      "category": "recency",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.72
+    },
+    {
+      "id": "H16",
+      "category": "metric-recall",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.36
+    },
+    {
+      "id": "H17",
+      "category": "silent-failure",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.65
+    },
+    {
+      "id": "H18",
+      "category": "subtle-distinction",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.6
+    },
+    {
+      "id": "H19",
+      "category": "cost",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.62
+    },
+    {
+      "id": "H20",
+      "category": "meta",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.37
+    },
+    {
+      "id": "H21",
+      "category": "specific-incident",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.96
+    },
+    {
+      "id": "H22",
+      "category": "specific-incident",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.93
+    },
+    {
+      "id": "H23",
+      "category": "specific-incident",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 4,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.76
+    },
+    {
+      "id": "H24",
+      "category": "config",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.66
+    },
+    {
+      "id": "H25",
+      "category": "policy",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.67
+    },
+    {
+      "id": "H26",
+      "category": "policy",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.47
+    },
+    {
+      "id": "H27",
+      "category": "hostname-chain",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.8
+    },
+    {
+      "id": "H28",
+      "category": "oblique",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.5
+    },
+    {
+      "id": "H29",
+      "category": "meta",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.64
+    },
+    {
+      "id": "H30",
+      "category": "architecture",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.55
+    },
+    {
+      "id": "H31",
+      "category": "architecture",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.54
+    },
+    {
+      "id": "H32",
+      "category": "operational",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": false,
+      "local_cov": 0,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.33
+    },
+    {
+      "id": "H33",
+      "category": "oblique",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.55
+    },
+    {
+      "id": "H34",
+      "category": "ops",
+      "haiku_hit": true,
+      "haiku_cov": 4,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.82
+    },
+    {
+      "id": "H35",
+      "category": "multi-hop",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.86
+    },
+    {
+      "id": "H36",
+      "category": "corroboration",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.89
+    },
+    {
+      "id": "H37",
+      "category": "diagnostic",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.87
+    },
+    {
+      "id": "H38",
+      "category": "meta",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.93
+    },
+    {
+      "id": "H39",
+      "category": "recency",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.54
+    },
+    {
+      "id": "H40",
+      "category": "oblique",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.53
+    },
+    {
+      "id": "H41",
+      "category": "specific-cmd",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.51
+    },
+    {
+      "id": "H42",
+      "category": "ops-policy",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.44
+    },
+    {
+      "id": "H43",
+      "category": "monitoring",
+      "haiku_hit": true,
+      "haiku_cov": 4,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.55
+    },
+    {
+      "id": "H44",
+      "category": "architecture",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.69
+    },
+    {
+      "id": "H45",
+      "category": "multi-hop",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.93
+    },
+    {
+      "id": "H46",
+      "category": "architecture",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.51
+    },
+    {
+      "id": "H47",
+      "category": "specific-value",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": false,
+      "local_cov": 0,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.62
+    },
+    {
+      "id": "H48",
+      "category": "hostname-specific",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.41
+    },
+    {
+      "id": "H49",
+      "category": "synthesis",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": false,
+      "local_cov": 0,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.47
+    },
+    {
+      "id": "H50",
+      "category": "meta",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.53
+    },
+    {
+      "id": "KG01",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.71
+    },
+    {
+      "id": "KG02",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.39
+    },
+    {
+      "id": "KG03",
+      "category": "kg",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": true,
+      "local_cov": 1,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.83
+    },
+    {
+      "id": "KG04",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 3,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.65
+    },
+    {
+      "id": "KG05",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": false,
+      "local_cov": 0,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.51
+    },
+    {
+      "id": "KG06",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 1,
+      "local_hit": true,
+      "local_cov": 3,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.73
+    },
+    {
+      "id": "KG07",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.79
+    },
+    {
+      "id": "KG08",
+      "category": "kg",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 2.05
+    },
+    {
+      "id": "KG09",
+      "category": "kg",
+      "haiku_hit": true,
+      "haiku_cov": 2,
+      "local_hit": true,
+      "local_cov": 2,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.51
+    },
+    {
+      "id": "KG10",
+      "category": "kg",
+      "haiku_hit": false,
+      "haiku_cov": 0,
+      "local_hit": false,
+      "local_cov": 0,
+      "local_model": "gemma3:12b",
+      "local_dt": 1.21
+    }
+  ]
+}

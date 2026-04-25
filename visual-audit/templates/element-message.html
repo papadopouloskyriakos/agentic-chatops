@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>Matrix Message Audit — {{TITLE}}</title>
+<style>
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Page ── */
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #17191c;
+    background: #fff;
+    padding: 24px 32px;
+    max-width: 900px;
+  }
+
+  /* ── Audit header ── */
+  .audit-header {
+    border-bottom: 2px solid #e3e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+  .audit-header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #737d8c;
+  }
+  .audit-header .category-tag {
+    display: inline-block;
+    background: #e8edf4;
+    color: #5c6470;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  /* ── Room header (mimics Element room header) ── */
+  .room-header {
+    background: #f6f7f8;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    font-size: 15px;
+    color: #2e2f32;
+    border-left: 4px solid #0dbd8b;
+  }
+
+  /* ── Timeline (message list) ── */
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* ── Message row (Element-like layout) ── */
+  .msg-row {
+    display: flex;
+    padding: 4px 16px 4px 16px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .msg-row:hover { background: #f6f7f8; }
+
+  /* ── Avatar column ── */
+  .msg-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 12px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .avatar-claude { background: #6638f0; }
+  .avatar-openclaw { background: #e67e22; }
+  .avatar-user { background: #3498db; }
+
+  /* ── Continuation message (same sender) — hide avatar ── */
+  .msg-row.continuation .msg-avatar {
+    visibility: hidden;
+  }
+  .msg-row.continuation .msg-sender { display: none; }
+
+  /* ── Message body column ── */
+  .msg-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ── Sender line ── */
+  .msg-sender {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 1px;
+  }
+  .sender-claude { color: #6638f0; }
+  .sender-openclaw { color: #e67e22; }
+  .sender-user { color: #3498db; }
+
+  .msg-time {
+    font-size: 11px;
+    color: #a1a9b6;
+    margin-left: 6px;
+    font-weight: 400;
+  }
+
+  /* ── Message body ── */
+  .msg-body {
+    font-size: 14px;
+    line-height: 1.55;
+    color: #2e2f32;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* m.notice styling — dimmer, like Element */
+  .msg-row.notice .msg-body {
+    color: #737d8c;
+  }
+  .msg-row.notice .msg-sender::after {
+    content: ' (notice)';
+    font-weight: 400;
+    font-size: 11px;
+    color: #a1a9b6;
+  }
+
+  /* ── Inline elements ── */
+  .msg-body strong, .msg-body b { font-weight: 600; }
+  .msg-body em, .msg-body i { font-style: italic; }
+  .msg-body small { font-size: 12px; color: #737d8c; }
+  .msg-body del { text-decoration: line-through; color: #737d8c; }
+
+  .msg-body code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12.5px;
+    background: #f0f1f3;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #c7254e;
+    white-space: pre-wrap;
+  }
+
+  .msg-body pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin: 6px 0;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .msg-body pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    border-radius: 0;
+    font-size: inherit;
+  }
+
+  /* ── Links ── */
+  .msg-body a {
+    color: #0086e6;
+    text-decoration: none;
+  }
+  .msg-body a:hover { text-decoration: underline; }
+
+  /* Matrix pill (user mention) */
+  .msg-body a[href*="matrix.to"] {
+    background: #e8ecf5;
+    padding: 1px 5px;
+    border-radius: 12px;
+    font-weight: 500;
+    color: #6638f0;
+  }
+
+  /* ── Lists ── */
+  .msg-body ul, .msg-body ol {
+    margin: 4px 0 4px 24px;
+  }
+  .msg-body li {
+    margin-bottom: 2px;
+  }
+
+  /* ── Headings ── */
+  .msg-body h1 { font-size: 20px; font-weight: 700; margin: 12px 0 6px; }
+  .msg-body h2 { font-size: 17px; font-weight: 700; margin: 10px 0 4px; }
+  .msg-body h3 { font-size: 15px; font-weight: 600; margin: 8px 0 4px; }
+  .msg-body h4 { font-size: 14px; font-weight: 600; margin: 6px 0 2px; }
+
+  /* ── Tables (Element renders these) ── */
+  .msg-body table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+    width: auto;
+    max-width: 100%;
+  }
+  .msg-body th, .msg-body td {
+    border: 1px solid #d5dbe5;
+    padding: 5px 10px;
+    text-align: left;
+  }
+  .msg-body th {
+    background: #f0f2f5;
+    font-weight: 600;
+  }
+  .msg-body tr:nth-child(even) td {
+    background: #f9fafb;
+  }
+
+  /* ── Blockquote ── */
+  .msg-body blockquote {
+    border-left: 3px solid #0dbd8b;
+    padding: 4px 12px;
+    margin: 6px 0;
+    color: #5c6470;
+    background: #f6f7f8;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* ── Horizontal rule ── */
+  .msg-body hr {
+    border: none;
+    border-top: 1px solid #e3e8f0;
+    margin: 10px 0;
+  }
+
+  /* ── Paragraph spacing ── */
+  .msg-body p {
+    margin-bottom: 4px;
+  }
+  .msg-body p:last-child { margin-bottom: 0; }
+
+  /* ── Date separator ── */
+  .date-separator {
+    text-align: center;
+    padding: 12px 0;
+    color: #a1a9b6;
+    font-size: 12px;
+    font-weight: 500;
+    position: relative;
+  }
+  .date-separator::before,
+  .date-separator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 35%;
+    height: 1px;
+    background: #e3e8f0;
+  }
+  .date-separator::before { left: 0; }
+  .date-separator::after { right: 0; }
+
+  /* ── Audit annotation overlay ── */
+  .audit-note {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin: 8px 16px;
+    font-size: 12px;
+    color: #856404;
+  }
+  .audit-note::before {
+    content: 'AUDIT: ';
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+  <div class="audit-header">
+    <h1>{{TITLE}}</h1>
+    <span class="category-tag">{{CATEGORY}}</span>
+    <span class="category-tag">{{ROOM}}</span>
+    <span class="category-tag">{{TIMESTAMP}}</span>
+  </div>
+  <div class="room-header">{{ROOM_DISPLAY}}</div>
+  <div class="timeline">
+    {{MESSAGES}}
+  </div>
+</body>
+</html>

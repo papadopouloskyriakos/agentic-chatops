@@ -1,0 +1,33 @@
+groups:
+  - name: agentic-health
+    interval: 60s
+    rules:
+      - alert: SkillPrereqMissing
+        expr: min by (skill, kind) (chatops_skill_requires_ok_all) == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "Skill {{ $labels.skill }} ({{ $labels.kind }}) has an unsatisfied prereq"
+          description: >
+            One or more entries in the skill's `requires.bins` or `requires.env`
+            block are not available on the host (binary missing, or env var unset).
+            Full report: `scripts/audit-skill-requires.sh`. Source of truth:
+            `.claude/{{ $labels.kind }}s/.../*.md` frontmatter.
+            Runbook: docs/runbooks/ (general skill-maintenance guidance).
+
+      - alert: SkillMetricsExporterStale
+        expr: time() - chatops_skill_metrics_last_run_timestamp > 1800
+        for: 10m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "skill-metrics exporter has not run in 30+ minutes"
+          description: >
+            `scripts/write-skill-metrics.sh` is cron `*/5` — if its last-run
+            timestamp is more than 30 minutes behind, the cron is wedged
+            or the script is erroring. Check `crontab -l` and run manually
+            to reproduce. Without this exporter, `SkillPrereqMissing`
+            cannot fire.

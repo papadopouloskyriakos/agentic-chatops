@@ -1,0 +1,104 @@
+{
+  "name": "claude-code",
+  "description": "Level 3 deep analysis agent — infrastructure remediation, code implementation, maintenance companion with human-in-the-loop approval",
+  "url": "ssh://app-user@nl-claude01",
+  "provider": {
+    "organization": "Example Corp",
+    "url": "https://example.net"
+  },
+  "version": "2026.4.15",
+  "documentationUrl": "https://gitlab.example.net/n8n/claude-gateway/-/blob/main/docs/a2a-protocol.md",
+
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "stateTransitionHistory": true
+  },
+
+  "authentication": {
+    "schemes": ["ssh-key"],
+    "credentials": "app-user-ssh-key"
+  },
+
+  "lifecycle": {
+    "status": "active",
+    "deployedAt": "2026-03-15T00:00:00Z",
+    "lastUpdated": "2026-04-15T00:00:00Z",
+    "decommissionProcedure": "docs/agent-decommissioning.md#tier-2-claude-code",
+    "riskClassification": "docs/tool-risk-classification.md"
+  },
+
+  "taskStates": ["submitted", "working", "input-required", "completed", "failed", "canceled"],
+
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["text/plain", "application/json"],
+
+  "skills": [
+    {
+      "id": "infra-remediation",
+      "name": "Infrastructure Remediation",
+      "description": "Deep infrastructure analysis, root cause diagnosis, remediation with human approval",
+      "inputModes": ["application/json"],
+      "outputModes": ["text/plain", "application/json"],
+      "tags": ["infrastructure", "remediation", "requires-approval"]
+    },
+    {
+      "id": "k8s-remediation",
+      "name": "Kubernetes Remediation",
+      "description": "Kubernetes issue remediation via GitOps (OpenTofu + Atlantis MR)",
+      "tags": ["kubernetes", "gitops", "requires-approval"]
+    },
+    {
+      "id": "code-implementation",
+      "name": "Code Implementation",
+      "description": "Code changes, multi-file edits, feature implementation, bug fixes",
+      "tags": ["development", "code"]
+    },
+    {
+      "id": "maintenance-companion",
+      "name": "Maintenance Companion",
+      "description": "Planned maintenance lifecycle: alert suppression, recovery monitoring, post-reboot verification",
+      "tags": ["maintenance", "lifecycle"]
+    },
+    {
+      "id": "correlated-burst-analysis",
+      "name": "Correlated Burst Analysis",
+      "description": "Multi-host correlated alert analysis with master/child issue management",
+      "tags": ["correlation", "multi-host"]
+    }
+  ],
+
+  "_nla2a": {
+    "tier": 2,
+    "model": "claude-opus-4-6",
+    "host": "nl-claude01",
+    "mcpServers": [
+      "netbox", "n8n-mcp", "gitlab-mcp", "youtrack", "proxmox",
+      "codegraph", "opentofu", "tfmcp", "kubernetes"
+    ],
+    "reasoning": {
+      "framework": "ReAct",
+      "variants": ["react_v1", "react_v2"],
+      "mandatoryStructure": ["THOUGHT", "ACTION", "OBSERVATION", "SYNTHESIS", "VERIFICATION"],
+      "selfConsistencyCheck": true,
+      "stepBackPromptingOnRecurrence": true
+    },
+    "routing": {
+      "escalateTo": "human",
+      "acceptsFrom": ["openclaw", "alert-pipeline", "human"],
+      "delegatesTo": ["openclaw"]
+    },
+    "limits": {
+      "maxConcurrent": 3,
+      "slots": ["dev", "infra-nl", "infra-gr"],
+      "costPerSession": 5.0,
+      "dailyBudget": 25.0,
+      "timeout": 600
+    },
+    "guardrails": {
+      "credentialPatterns": 16,
+      "confidenceGating": { "stopThreshold": 0.5, "reviewThreshold": 0.7 },
+      "approvalRequired": ["infrastructure-changes", "k8s-mutations", "production-deploys"]
+    }
+  }
+}

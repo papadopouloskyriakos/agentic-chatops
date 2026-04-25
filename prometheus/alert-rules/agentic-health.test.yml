@@ -1,0 +1,107 @@
+# promtool test rules for agentic-health.yml
+#
+# Exercises both alerts under synthetic time-series and asserts they fire
+# at the expected eval_time with the expected labels. Validates that the
+# `for` durations are correct (30m / 10m) and that labels propagate.
+#
+# Run: kubectl -n monitoring exec ... promtool test rules /path/to/agentic-health.test.yml
+rule_files:
+  - agentic-health.yml
+
+tests:
+  # ─── SkillPrereqMissing ──────────────────────────────────────────────────
+  - interval: 1m
+    name: "SkillPrereqMissing fires after 30m of requires_ok_all=0"
+    input_series:
+      # Simulate a skill whose prereq is broken for 40 minutes straight
+      - series: 'chatops_skill_requires_ok_all{skill="cisco-asa-specialist",kind="agent"}'
+        values: '0+0x40'
+      # A concurrent healthy skill (should not fire)
+      - series: 'chatops_skill_requires_ok_all{skill="triage",kind="skill"}'
+        values: '1+0x40'
+    alert_rule_test:
+      # Before 30m — no alert (for: 30m requires sustained 0)
+      - eval_time: 29m
+        alertname: SkillPrereqMissing
+        exp_alerts: []
+      # After 30m + 1m — alert fires for the broken skill only.
+      # Description uses `>` (folded with trailing newline) to match the
+      # block-scalar style in agentic-health.yml's annotation.
+      - eval_time: 31m
+        alertname: SkillPrereqMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              skill: cisco-asa-specialist
+              kind: agent
+            exp_annotations:
+              summary: "Skill cisco-asa-specialist (agent) has an unsatisfied prereq"
+              description: >
+                One or more entries in the skill's `requires.bins` or `requires.env`
+                block are not available on the host (binary missing, or env var unset).
+                Full report: `scripts/audit-skill-requires.sh`. Source of truth:
+                `.claude/agents/.../*.md` frontmatter.
+                Runbook: docs/runbooks/ (general skill-maintenance guidance).
+
+  # Recovery path: metric comes back to 1 → alert resolves
+  - interval: 1m
+    name: "SkillPrereqMissing clears when requires_ok_all returns to 1"
+    input_series:
+      # 35m of 0, then 20m of 1 → alert fires, then clears
+      - series: 'chatops_skill_requires_ok_all{skill="ci-debugger",kind="agent"}'
+        values: '0+0x35 1+0x20'
+    alert_rule_test:
+      - eval_time: 32m
+        alertname: SkillPrereqMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              skill: ci-debugger
+              kind: agent
+            exp_annotations:
+              summary: "Skill ci-debugger (agent) has an unsatisfied prereq"
+              description: >
+                One or more entries in the skill's `requires.bins` or `requires.env`
+                block are not available on the host (binary missing, or env var unset).
+                Full report: `scripts/audit-skill-requires.sh`. Source of truth:
+                `.claude/agents/.../*.md` frontmatter.
+                Runbook: docs/runbooks/ (general skill-maintenance guidance).
+      # After recovery for 20 min (eval_time 55m) — metric has been 1 since
+      # t=35m. 20 minutes of recovery. Alert should be resolved.
+      - eval_time: 55m
+        alertname: SkillPrereqMissing
+        exp_alerts: []
+
+  # ─── SkillMetricsExporterStale ──────────────────────────────────────────
+  - interval: 1m
+    name: "SkillMetricsExporterStale fires when exporter stops"
+    input_series:
+      # Exporter timestamp frozen at unix=0. Expression is
+      #   time() - X > 1800
+      # time() at eval_time T (minutes) = T*60. Condition holds when
+      # T*60 > 1800, i.e., T > 30m. With `for: 10m` hold, alert begins
+      # firing at T=40m+1m (eval interval).
+      - series: 'chatops_skill_metrics_last_run_timestamp'
+        values: '0+0x60'
+    alert_rule_test:
+      # At 30m the condition just went TRUE → in the `for` hold window
+      - eval_time: 35m
+        alertname: SkillMetricsExporterStale
+        exp_alerts: []
+      # At 41m the 10m `for` hold is met → alert fires
+      - eval_time: 41m
+        alertname: SkillMetricsExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+            exp_annotations:
+              summary: "skill-metrics exporter has not run in 30+ minutes"
+              description: >
+                `scripts/write-skill-metrics.sh` is cron `*/5` — if its last-run
+                timestamp is more than 30 minutes behind, the cron is wedged
+                or the script is erroring. Check `crontab -l` and run manually
+                to reproduce. Without this exporter, `SkillPrereqMissing`
+                cannot fire.

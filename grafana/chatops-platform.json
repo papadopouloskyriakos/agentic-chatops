@@ -1,0 +1,1408 @@
+{
+  "dashboard": {
+    "uid": "6ec01ad8-0433-4832-bfed-ca0f4254f817",
+    "title": "ChatOps Platform Performance",
+    "tags": [
+      "chatops",
+      "claude-gateway"
+    ],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "schemaVersion": 39,
+    "version": 0,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active Sessions",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 3
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_active_sessions",
+            "legendFormat": "Sessions"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Queue Depth",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 20
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_queue_depth",
+            "legendFormat": "Queue"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Slot Locks",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "FREE",
+                    "color": "green"
+                  },
+                  "1": {
+                    "text": "LOCKED",
+                    "color": "red"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "noValue": "FREE"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "horizontal",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_lock_held{slot=\"dev\"}",
+            "legendFormat": "dev",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "chatops_lock_held{slot=\"infra-nl\"}",
+            "legendFormat": "infra-nl",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "chatops_lock_held{slot=\"infra-gr\"}",
+            "legendFormat": "infra-gr",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Gateway Mode",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "INACTIVE",
+                    "color": "semi-dark-orange"
+                  },
+                  "1": {
+                    "text": "ACTIVE",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "name",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_gateway_mode{mode=\"oc-cc\"}",
+            "legendFormat": "oc-cc",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "chatops_gateway_mode{mode=\"oc-oc\"}",
+            "legendFormat": "oc-oc",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "chatops_gateway_mode{mode=\"cc-cc\"}",
+            "legendFormat": "cc-cc",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "chatops_gateway_mode{mode=\"cc-oc\"}",
+            "legendFormat": "cc-oc",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "OpenAI API Status (Tier 1)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "1": {
+                    "text": "OPERATIONAL",
+                    "color": "green"
+                  },
+                  "0": {
+                    "text": "DEGRADED",
+                    "color": "red"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "noValue": "N/A"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "openai_component_status{component=\"chat_completions\"}",
+            "legendFormat": "Chat Completions",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "openai_component_status{component=\"responses\"}",
+            "legendFormat": "Responses",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "openai_component_status{component=\"embeddings\"}",
+            "legendFormat": "Embeddings",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "openai_component_status{component=\"audio\"}",
+            "legendFormat": "Audio",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Claude API Status (Tier 2)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "1": {
+                    "text": "OPERATIONAL",
+                    "color": "green"
+                  },
+                  "0": {
+                    "text": "DEGRADED",
+                    "color": "red"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "noValue": "N/A"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "claude_component_status{component=\"claude_ai\"}",
+            "legendFormat": "Claude AI",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "claude_component_status{component=\"claude_code\"}",
+            "legendFormat": "Claude Code",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "claude_component_status{component=\"claude_api__api_anthropic_com_\"}",
+            "legendFormat": "Claude API",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "claude_component_status{component=\"platform_claude_com__formerly_console_anthropic_com_\"}",
+            "legendFormat": "Platform",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Active Incidents",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "openai_active_incidents",
+            "legendFormat": "OpenAI"
+          },
+          {
+            "refId": "B",
+            "expr": "claude_active_incidents",
+            "legendFormat": "Claude"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Sessions Logged",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": null
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_sessions_logged_total",
+            "legendFormat": "Total Sessions"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Cooldowns",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 20
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_cooldowns_active",
+            "legendFormat": "Cooldowns"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Paused Sessions",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_paused_sessions",
+            "legendFormat": "Paused"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Messages Relayed 24h",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": null
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_messages_relayed",
+            "legendFormat": "Messages"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Commands (24h)",
+        "type": "bargauge",
+        "gridPos": {
+          "h": 5,
+          "w": 12,
+          "x": 0,
+          "y": 12
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": null
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true,
+          "minVizWidth": 0,
+          "minVizHeight": 10
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_commands_total{command=~\".+\"}",
+            "legendFormat": "{{command}}"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Sessions by Outcome",
+        "type": "bargauge",
+        "gridPos": {
+          "h": 5,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": null
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true,
+          "minVizWidth": 0,
+          "minVizHeight": 10
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_sessions_by_outcome{outcome=~\".+\"}",
+            "legendFormat": "{{outcome}}"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Service Availability",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 17
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "noValue": "N/A"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "probe_success{job=\"chatops-blackbox\",instance=~\".*n8n.*\"}",
+            "legendFormat": "n8n",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "probe_success{job=\"chatops-blackbox\",instance=~\".*gitlab.*\"}",
+            "legendFormat": "GitLab",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "probe_success{job=\"chatops-blackbox\",instance=~\".*youtrack.*\"}",
+            "legendFormat": "YouTrack",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "probe_success{job=\"chatops-blackbox\",instance=~\".*matrix.*\"}",
+            "legendFormat": "Matrix",
+            "instant": true
+          },
+          {
+            "refId": "E",
+            "expr": "probe_success{job=\"chatops-blackbox\",instance=~\".*ollama.*\"}",
+            "legendFormat": "Ollama",
+            "instant": true
+          },
+          {
+            "refId": "F",
+            "expr": "probe_success{job=\"chatops-blackbox\",instance=~\".*grafana.*\"}",
+            "legendFormat": "Grafana",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "title": "Session Activity",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 21
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 20,
+              "lineWidth": 2,
+              "pointSize": 5,
+              "showPoints": "auto",
+              "gradientMode": "opacity",
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          },
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "calcs": []
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_active_sessions",
+            "legendFormat": "Active Sessions"
+          },
+          {
+            "refId": "B",
+            "expr": "chatops_queue_depth",
+            "legendFormat": "Queue Depth"
+          },
+          {
+            "refId": "C",
+            "expr": "chatops_lock_held",
+            "legendFormat": "Lock Active"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "title": "Session Cost (7d Rolling)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 4,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 20
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "background",
+          "graphMode": "none"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_session_cost_7d",
+            "legendFormat": "7d Cost",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Cost per Project (30d avg)",
+        "type": "bargauge",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 4,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_session_cost_avg",
+            "legendFormat": "{{project}}",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "Avg Duration / Avg Turns",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value",
+          "graphMode": "none"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_session_duration_avg_seconds",
+            "legendFormat": "Avg Duration (s)",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "chatops_session_turns_avg",
+            "legendFormat": "Avg Turns",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "chatops_session_confidence_avg",
+            "legendFormat": "Avg Confidence",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "title": "Resolution Types (30d)",
+        "type": "piechart",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "legend": {
+            "displayMode": "table",
+            "placement": "right"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "chatops_sessions_by_resolution",
+            "legendFormat": "{{type}}",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "title": "Tier 1 Triage Outcomes (30d)",
+        "type": "bargauge",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 20
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "agent_openclaw_triage_total",
+            "legendFormat": "{{site}}/{{outcome}}",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "title": "Tier 2 Sessions by Outcome (30d)",
+        "type": "bargauge",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 20
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "agent_claude_sessions_total",
+            "legendFormat": "{{project}}/{{outcome}}",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 22,
+        "title": "Validation Retry Rate / Knowledge Entries",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 20
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.3
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "colorMode": "value",
+          "graphMode": "none"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "agent_claude_validation_retry_rate",
+            "legendFormat": "Retry Rate",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "chatops_knowledge_entries_total",
+            "legendFormat": "KB Entries",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "chatops_knowledge_entries_90d",
+            "legendFormat": "KB (90d)",
+            "instant": true
+          }
+        ]
+      }
+    ],
+    "timepicker": {
+      "hidden": true
+    }
+  },
+  "overwrite": true,
+  "folderUid": ""
+}

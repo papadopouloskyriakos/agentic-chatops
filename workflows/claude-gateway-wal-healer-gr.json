@@ -1,0 +1,1218 @@
+{
+  "updatedAt": "2026-03-25T17:36:42.045Z",
+  "createdAt": "2026-03-24T21:36:32.249Z",
+  "id": "MIryOuC73LAbIT6D",
+  "name": "NL - Prometheus WAL Self-Healer (GR)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "prometheus-wal-healer-gr",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prometheus-wal-healer-gr",
+        "options": {},
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      }
+    },
+    {
+      "id": "parse-validate",
+      "name": "Parse & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// \u2500\u2500\u2500 Maintenance mode check \u2500\u2500\u2500\n// Check if maintenance file exists on app-user\nconst maintFile = require('child_process').execSync(\n  'cat /home/app-user/gateway.maintenance 2>/dev/null || echo NONE'\n).toString().trim();\n\nif (maintFile !== 'NONE') {\n  return [{ json: { valid: false, maintenanceSuppressed: true, reason: 'maintenance_active' } }];\n}\n// \u2500\u2500\u2500 End maintenance check \u2500\u2500\u2500\n\n// Parse Alertmanager payload and validate it's the expected alert\nconst body = $input.first().json.body || $input.first().json;\nconst alerts = body.alerts || [];\n\n// Find PrometheusTSDBCompactionsFailing in firing state\nconst target = alerts.find(a =>\n  a.labels?.alertname === 'PrometheusTSDBCompactionsFailing' &&\n  a.status === 'firing'\n);\n\nif (!target) {\n  return [{ json: { valid: false, reason: 'No firing PrometheusTSDBCompactionsFailing alert found' } }];\n}\n\nreturn [{ json: {\n  valid: true,\n  alertname: target.labels.alertname,\n  namespace: target.labels?.namespace || 'monitoring',\n  severity: target.labels?.severity || 'unknown',\n  summary: target.annotations?.summary || target.annotations?.description || 'WAL compaction failing',\n  startsAt: target.startsAt,\n  instance: target.labels?.instance || 'unknown'\n}}];"
+      }
+    },
+    {
+      "id": "is-valid",
+      "name": "Is Valid Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.valid }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "check-cooldown",
+      "name": "Check Cooldown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 6-hour cooldown check using staticData\nconst COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours\nconst staticData = $getWorkflowStaticData('global');\nconst now = Date.now();\nconst lastRestart = staticData.lastRestartTime || 0;\nconst elapsed = now - lastRestart;\nconst withinCooldown = elapsed < COOLDOWN_MS;\n\nconst prev = $input.first().json;\n\nreturn [{ json: {\n  ...prev,\n  withinCooldown,\n  lastRestartTime: lastRestart,\n  lastRestartAgo: lastRestart ? Math.round(elapsed / 60000) + ' min ago' : 'never',\n  cooldownRemaining: withinCooldown ? Math.round((COOLDOWN_MS - elapsed) / 60000) + ' min' : '0'\n}}];"
+      }
+    },
+    {
+      "id": "within-cooldown",
+      "name": "Within Cooldown?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cooldown-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.withinCooldown }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-cooldown-escalation",
+      "name": "Post Cooldown Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-cd-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'WAL Self-Healer: PrometheusTSDBCompactionsFailing re-fired but pod was already restarted ' + $json.lastRestartAgo + '. Cooldown active (' + $json.cooldownRemaining + ' remaining). This is NOT a simple WAL corruption \u2014 manual investigation required.\\n\\nPod: prometheus-monitoring-kube-prometheus-prometheus-0\\nNamespace: monitoring\\nContext: gr', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> <code>PrometheusTSDBCompactionsFailing</code> re-fired but pod was already restarted ' + $json.lastRestartAgo + '. Cooldown active (' + $json.cooldownRemaining + ' remaining).<br><br><b>This is NOT a simple WAL corruption \u2014 manual investigation required.</b><br><br>Pod: <code>prometheus-monitoring-kube-prometheus-prometheus-0</code><br>Namespace: <code>monitoring</code> | Context: <code>gr</code>' }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "restart-pod",
+      "name": "Restart Prometheus Pod",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        200
+      ],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "parameters": {
+        "command": "export PATH=/home/app-user/.local/bin:$PATH; kubectl delete pod prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr 2>&1 && echo 'DELETE_OK' || echo 'DELETE_FAILED'",
+        "authentication": "privateKey"
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "record-restart",
+      "name": "Record Restart Time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Record restart time in staticData\nconst staticData = $getWorkflowStaticData('global');\nconst now = Date.now();\nstaticData.lastRestartTime = now;\nstaticData.restartCount = (staticData.restartCount || 0) + 1;\n\nconst sshResult = $('Restart Prometheus Pod').first().json.stdout || $('Restart Prometheus Pod').first().json.stderr || '';\nconst deleteOk = sshResult.includes('DELETE_OK') || sshResult.includes('deleted');\n\nconst prev = $('Check Cooldown').first().json;\n\nreturn [{ json: {\n  ...prev,\n  restartedAt: new Date(now).toISOString(),\n  restartCount: staticData.restartCount,\n  deleteOk,\n  sshResult: sshResult.substring(0, 500)\n}}];"
+      }
+    },
+    {
+      "id": "post-restart-notice",
+      "name": "Post Restart Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-restart-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'WAL Self-Healer: Restarting Prometheus pod to clear corrupt WAL segment.\\n\\nAlert: ' + $json.alertname + '\\nAction: kubectl delete pod prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr\\nResult: ' + ($json.deleteOk ? 'Pod deleted successfully' : 'Delete may have failed: ' + $json.sshResult) + '\\n\\nWaiting 3 minutes for pod restart + TSDB replay...', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> Restarting Prometheus pod to clear corrupt WAL segment.<br><br><b>Alert:</b> <code>' + $json.alertname + '</code><br><b>Action:</b> <code>kubectl delete pod ... -n monitoring --context gr</code><br><b>Result:</b> ' + ($json.deleteOk ? 'Pod deleted successfully' : 'Delete may have failed: <code>' + $json.sshResult + '</code>') + '<br><br>Waiting 3 minutes for pod restart + TSDB replay...' }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "wait-recovery",
+      "name": "Wait for Recovery",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "amount": 3,
+        "unit": "minutes"
+      }
+    },
+    {
+      "id": "check-compaction",
+      "name": "Check Compaction Health",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        200
+      ],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      },
+      "parameters": {
+        "command": "export PATH=/home/app-user/.local/bin:$PATH\nPOD_STATUS=$(kubectl get pod prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr -o jsonpath='{.status.phase}' 2>&1)\necho \"POD_STATUS=$POD_STATUS\"\nif [ \"$POD_STATUS\" = \"Running\" ]; then\n  ERRORS=$(kubectl logs prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr -c prometheus --since=3m 2>&1 | grep -ci 'compaction failed')\n  echo \"COMPACTION_ERRORS=$ERRORS\"\n  if [ \"$ERRORS\" -eq 0 ] 2>/dev/null; then\n    echo \"RECOVERY=OK\"\n  else\n    echo \"RECOVERY=FAILED\"\n  fi\nelse\n  echo \"RECOVERY=POD_NOT_RUNNING\"\nfi",
+        "authentication": "privateKey"
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "parse-recovery",
+      "name": "Parse Recovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const output = $('Check Compaction Health').first().json.stdout || '';\nconst recovered = output.includes('RECOVERY=OK');\nconst podRunning = output.includes('POD_STATUS=Running');\nconst prev = $('Record Restart Time').first().json;\n\nreturn [{ json: {\n  ...prev,\n  recovered,\n  podRunning,\n  compactionOutput: output.substring(0, 500)\n}}];"
+      }
+    },
+    {
+      "id": "is-recovered",
+      "name": "Recovered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "recovery-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.recovered }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "post-recovery-success",
+      "name": "Post Recovery Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-ok-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'WAL Self-Healer: Prometheus pod restarted and compaction recovered successfully.\\n\\nPod is Running, no compaction errors in post-restart logs.\\nTotal auto-restarts: ' + $json.restartCount + '\\n\\nNo further action required. Cooldown active for 6 hours.', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> Prometheus pod restarted and compaction recovered successfully.<br><br>Pod is <b>Running</b>, no compaction errors in post-restart logs.<br>Total auto-restarts: <b>' + $json.restartCount + '</b><br><br>No further action required. Cooldown active for 6 hours.' }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "post-recovery-failed",
+      "name": "Post Recovery Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-fail-{{ Date.now() }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: 'WAL Self-Healer: Prometheus pod restarted but compaction still failing!\\n\\nPod running: ' + $json.podRunning + '\\nCompaction check: ' + $json.compactionOutput + '\\n\\n@dominicus Manual investigation required. This is not a simple WAL corruption \u2014 possible disk/iSCSI issue.\\n\\nSuggested checks:\\n1. kubectl logs prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr -c prometheus | grep -i compact\\n2. kubectl exec ... -c prometheus -- df -h /prometheus\\n3. Check iSCSI connectivity to gr-pve02', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> Prometheus pod restarted but compaction still failing!<br><br><b>Pod running:</b> ' + $json.podRunning + '<br><b>Compaction check:</b> <code>' + $json.compactionOutput + '</code><br><br><b>@dominicus Manual investigation required.</b> This is not a simple WAL corruption \u2014 possible disk/iSCSI issue.<br><br><b>Suggested checks:</b><br>1. <code>kubectl logs ... -c prometheus | grep -i compact</code><br>2. <code>kubectl exec ... -c prometheus -- df -h /prometheus</code><br>3. Check iSCSI connectivity to gr-pve02' }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "0ba1b636-cf71-4f78-b7e4-1a0396bb5eca",
+      "name": "Find YT Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://youtrack.example.net/api/issues?query=project:{IFRGRSKG01PRD}+Alert+Rule:+PrometheusTSDBCompactionsFailing+state:+Open,{In Progress}&fields=idReadable,summary&$top=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "e9b4ba3b-b9a4-488f-9f8f-03eeca025939",
+      "name": "Close YT Issue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json;\nconst issues = Array.isArray(response) ? response : [];\n\nif (!issues || issues.length === 0) {\n  return [{ json: { action: 'no_issue_found' } }];\n}\n\nconst issueId = issues[0].idReadable;\nconst restartCount = $('Record Restart Time').first().json.restartCount || 1;\nconst TOKEN = 'REDACTED_YT_TOKEN';\nconst BASE = 'https://youtrack.example.net/api';\nconst headers = { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' };\n\nconst commentBody = 'WAL Self-Healer: Auto-resolved.\\n\\nPod restarted and compaction recovered successfully (verified after 3min wait).\\nTotal auto-restarts: ' + restartCount + '\\n\\nNo further action required.';\n\ntry {\n  await fetch(BASE + '/issues/' + issueId + '/comments', { method: 'POST', headers, body: JSON.stringify({ text: commentBody }) });\n} catch(e) {}\n\ntry {\n  await fetch(BASE + '/commands', { method: 'POST', headers, body: JSON.stringify({ query: 'state To Verify', issues: [{ idReadable: issueId }] }) });\n} catch(e) {}\n\nreturn [{ json: { action: 'closed', issueId } }];"
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Alert?": {
+      "main": [
+        [
+          {
+            "node": "Check Cooldown",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Check Cooldown": {
+      "main": [
+        [
+          {
+            "node": "Within Cooldown?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Within Cooldown?": {
+      "main": [
+        [
+          {
+            "node": "Post Cooldown Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Restart Prometheus Pod",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restart Prometheus Pod": {
+      "main": [
+        [
+          {
+            "node": "Record Restart Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Restart Time": {
+      "main": [
+        [
+          {
+            "node": "Post Restart Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Restart Notice": {
+      "main": [
+        [
+          {
+            "node": "Wait for Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Recovery": {
+      "main": [
+        [
+          {
+            "node": "Check Compaction Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Compaction Health": {
+      "main": [
+        [
+          {
+            "node": "Parse Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Recovery": {
+      "main": [
+        [
+          {
+            "node": "Recovered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recovered?": {
+      "main": [
+        [
+          {
+            "node": "Post Recovery Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post Recovery Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Recovery Success": {
+      "main": [
+        [
+          {
+            "node": "Find YT Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find YT Issue": {
+      "main": [
+        [
+          {
+            "node": "Close YT Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "global": {
+      "lastRestartTime": VMID_REDACTED9048,
+      "restartCount": 3
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "c87a25dc-28c3-4997-a066-2d3960dde1c3",
+  "activeVersionId": "c87a25dc-28c3-4997-a066-2d3960dde1c3",
+  "versionCounter": 17,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-24T21:36:32.256Z",
+      "createdAt": "2026-03-24T21:36:32.256Z",
+      "role": "workflow:owner",
+      "workflowId": "MIryOuC73LAbIT6D",
+      "projectId": "CLDM2Ezgw9101HuF",
+      "project": {
+        "updatedAt": "2025-01-28T17:38:17.181Z",
+        "createdAt": "2025-01-28T17:31:03.531Z",
+        "id": "CLDM2Ezgw9101HuF",
+        "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-03-25T17:36:42.046Z",
+    "createdAt": "2026-03-25T17:36:42.046Z",
+    "versionId": "c87a25dc-28c3-4997-a066-2d3960dde1c3",
+    "workflowId": "MIryOuC73LAbIT6D",
+    "nodes": [
+      {
+        "id": "webhook-trigger",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "prometheus-wal-healer-gr",
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "prometheus-wal-healer-gr",
+          "options": {},
+          "responseMode": "responseNode"
+        }
+      },
+      {
+        "id": "respond-ok",
+        "name": "Respond OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "OK"
+        }
+      },
+      {
+        "id": "parse-validate",
+        "name": "Parse & Validate",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// \u2500\u2500\u2500 Maintenance mode check \u2500\u2500\u2500\n// Check if maintenance file exists on app-user\nconst maintFile = require('child_process').execSync(\n  'cat /home/app-user/gateway.maintenance 2>/dev/null || echo NONE'\n).toString().trim();\n\nif (maintFile !== 'NONE') {\n  return [{ json: { valid: false, maintenanceSuppressed: true, reason: 'maintenance_active' } }];\n}\n// \u2500\u2500\u2500 End maintenance check \u2500\u2500\u2500\n\n// Parse Alertmanager payload and validate it's the expected alert\nconst body = $input.first().json.body || $input.first().json;\nconst alerts = body.alerts || [];\n\n// Find PrometheusTSDBCompactionsFailing in firing state\nconst target = alerts.find(a =>\n  a.labels?.alertname === 'PrometheusTSDBCompactionsFailing' &&\n  a.status === 'firing'\n);\n\nif (!target) {\n  return [{ json: { valid: false, reason: 'No firing PrometheusTSDBCompactionsFailing alert found' } }];\n}\n\nreturn [{ json: {\n  valid: true,\n  alertname: target.labels.alertname,\n  namespace: target.labels?.namespace || 'monitoring',\n  severity: target.labels?.severity || 'unknown',\n  summary: target.annotations?.summary || target.annotations?.description || 'WAL compaction failing',\n  startsAt: target.startsAt,\n  instance: target.labels?.instance || 'unknown'\n}}];"
+        }
+      },
+      {
+        "id": "is-valid",
+        "name": "Is Valid Alert?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "valid-check",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $json.valid }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "check-cooldown",
+        "name": "Check Cooldown",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// 6-hour cooldown check using staticData\nconst COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours\nconst staticData = $getWorkflowStaticData('global');\nconst now = Date.now();\nconst lastRestart = staticData.lastRestartTime || 0;\nconst elapsed = now - lastRestart;\nconst withinCooldown = elapsed < COOLDOWN_MS;\n\nconst prev = $input.first().json;\n\nreturn [{ json: {\n  ...prev,\n  withinCooldown,\n  lastRestartTime: lastRestart,\n  lastRestartAgo: lastRestart ? Math.round(elapsed / 60000) + ' min ago' : 'never',\n  cooldownRemaining: withinCooldown ? Math.round((COOLDOWN_MS - elapsed) / 60000) + ' min' : '0'\n}}];"
+        }
+      },
+      {
+        "id": "within-cooldown",
+        "name": "Within Cooldown?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1100,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cooldown-check",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $json.withinCooldown }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-cooldown-escalation",
+        "name": "Post Cooldown Escalation",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          -200
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-cd-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'WAL Self-Healer: PrometheusTSDBCompactionsFailing re-fired but pod was already restarted ' + $json.lastRestartAgo + '. Cooldown active (' + $json.cooldownRemaining + ' remaining). This is NOT a simple WAL corruption \u2014 manual investigation required.\\n\\nPod: prometheus-monitoring-kube-prometheus-prometheus-0\\nNamespace: monitoring\\nContext: gr', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> <code>PrometheusTSDBCompactionsFailing</code> re-fired but pod was already restarted ' + $json.lastRestartAgo + '. Cooldown active (' + $json.cooldownRemaining + ' remaining).<br><br><b>This is NOT a simple WAL corruption \u2014 manual investigation required.</b><br><br>Pod: <code>prometheus-monitoring-kube-prometheus-prometheus-0</code><br>Namespace: <code>monitoring</code> | Context: <code>gr</code>' }) }}",
+          "options": {}
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "restart-pod",
+        "name": "Restart Prometheus Pod",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          1320,
+          200
+        ],
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "parameters": {
+          "command": "export PATH=/home/app-user/.local/bin:$PATH; kubectl delete pod prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr 2>&1 && echo 'DELETE_OK' || echo 'DELETE_FAILED'",
+          "authentication": "privateKey"
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "record-restart",
+        "name": "Record Restart Time",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1540,
+          200
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// Record restart time in staticData\nconst staticData = $getWorkflowStaticData('global');\nconst now = Date.now();\nstaticData.lastRestartTime = now;\nstaticData.restartCount = (staticData.restartCount || 0) + 1;\n\nconst sshResult = $('Restart Prometheus Pod').first().json.stdout || $('Restart Prometheus Pod').first().json.stderr || '';\nconst deleteOk = sshResult.includes('DELETE_OK') || sshResult.includes('deleted');\n\nconst prev = $('Check Cooldown').first().json;\n\nreturn [{ json: {\n  ...prev,\n  restartedAt: new Date(now).toISOString(),\n  restartCount: staticData.restartCount,\n  deleteOk,\n  sshResult: sshResult.substring(0, 500)\n}}];"
+        }
+      },
+      {
+        "id": "post-restart-notice",
+        "name": "Post Restart Notice",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1760,
+          200
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-restart-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'WAL Self-Healer: Restarting Prometheus pod to clear corrupt WAL segment.\\n\\nAlert: ' + $json.alertname + '\\nAction: kubectl delete pod prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr\\nResult: ' + ($json.deleteOk ? 'Pod deleted successfully' : 'Delete may have failed: ' + $json.sshResult) + '\\n\\nWaiting 3 minutes for pod restart + TSDB replay...', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> Restarting Prometheus pod to clear corrupt WAL segment.<br><br><b>Alert:</b> <code>' + $json.alertname + '</code><br><b>Action:</b> <code>kubectl delete pod ... -n monitoring --context gr</code><br><b>Result:</b> ' + ($json.deleteOk ? 'Pod deleted successfully' : 'Delete may have failed: <code>' + $json.sshResult + '</code>') + '<br><br>Waiting 3 minutes for pod restart + TSDB replay...' }) }}",
+          "options": {}
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "wait-recovery",
+        "name": "Wait for Recovery",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1980,
+          200
+        ],
+        "parameters": {
+          "amount": 3,
+          "unit": "minutes"
+        }
+      },
+      {
+        "id": "check-compaction",
+        "name": "Check Compaction Health",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [
+          2200,
+          200
+        ],
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "REDACTED_SSH_CRED",
+            "name": "nl-claude01 - SSH app-user"
+          }
+        },
+        "parameters": {
+          "command": "export PATH=/home/app-user/.local/bin:$PATH\nPOD_STATUS=$(kubectl get pod prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr -o jsonpath='{.status.phase}' 2>&1)\necho \"POD_STATUS=$POD_STATUS\"\nif [ \"$POD_STATUS\" = \"Running\" ]; then\n  ERRORS=$(kubectl logs prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr -c prometheus --since=3m 2>&1 | grep -ci 'compaction failed')\n  echo \"COMPACTION_ERRORS=$ERRORS\"\n  if [ \"$ERRORS\" -eq 0 ] 2>/dev/null; then\n    echo \"RECOVERY=OK\"\n  else\n    echo \"RECOVERY=FAILED\"\n  fi\nelse\n  echo \"RECOVERY=POD_NOT_RUNNING\"\nfi",
+          "authentication": "privateKey"
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "parse-recovery",
+        "name": "Parse Recovery",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          200
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const output = $('Check Compaction Health').first().json.stdout || '';\nconst recovered = output.includes('RECOVERY=OK');\nconst podRunning = output.includes('POD_STATUS=Running');\nconst prev = $('Record Restart Time').first().json;\n\nreturn [{ json: {\n  ...prev,\n  recovered,\n  podRunning,\n  compactionOutput: output.substring(0, 500)\n}}];"
+        }
+      },
+      {
+        "id": "is-recovered",
+        "name": "Recovered?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2640,
+          200
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "recovery-check",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                },
+                "leftValue": "={{ $json.recovered }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "post-recovery-success",
+        "name": "Post Recovery Success",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2860,
+          100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-ok-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: 'WAL Self-Healer: Prometheus pod restarted and compaction recovered successfully.\\n\\nPod is Running, no compaction errors in post-restart logs.\\nTotal auto-restarts: ' + $json.restartCount + '\\n\\nNo further action required. Cooldown active for 6 hours.', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> Prometheus pod restarted and compaction recovered successfully.<br><br>Pod is <b>Running</b>, no compaction errors in post-restart logs.<br>Total auto-restarts: <b>' + $json.restartCount + '</b><br><br>No further action required. Cooldown active for 6 hours.' }) }}",
+          "options": {}
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "post-recovery-failed",
+        "name": "Post Recovery Failed",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2860,
+          300
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/wal-healer-fail-{{ Date.now() }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: 'WAL Self-Healer: Prometheus pod restarted but compaction still failing!\\n\\nPod running: ' + $json.podRunning + '\\nCompaction check: ' + $json.compactionOutput + '\\n\\n@dominicus Manual investigation required. This is not a simple WAL corruption \u2014 possible disk/iSCSI issue.\\n\\nSuggested checks:\\n1. kubectl logs prometheus-monitoring-kube-prometheus-prometheus-0 -n monitoring --context gr -c prometheus | grep -i compact\\n2. kubectl exec ... -c prometheus -- df -h /prometheus\\n3. Check iSCSI connectivity to gr-pve02', format: 'org.matrix.custom.html', formatted_body: '<b>WAL Self-Healer:</b> Prometheus pod restarted but compaction still failing!<br><br><b>Pod running:</b> ' + $json.podRunning + '<br><b>Compaction check:</b> <code>' + $json.compactionOutput + '</code><br><br><b>@dominicus Manual investigation required.</b> This is not a simple WAL corruption \u2014 possible disk/iSCSI issue.<br><br><b>Suggested checks:</b><br>1. <code>kubectl logs ... -c prometheus | grep -i compact</code><br>2. <code>kubectl exec ... -c prometheus -- df -h /prometheus</code><br>3. Check iSCSI connectivity to gr-pve02' }) }}",
+          "options": {}
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "0ba1b636-cf71-4f78-b7e4-1a0396bb5eca",
+        "name": "Find YT Issue",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3080,
+          100
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://youtrack.example.net/api/issues?query=project:{IFRGRSKG01PRD}+Alert+Rule:+PrometheusTSDBCompactionsFailing+state:+Open,{In Progress}&fields=idReadable,summary&$top=1",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "e9b4ba3b-b9a4-488f-9f8f-03eeca025939",
+        "name": "Close YT Issue",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3300,
+          100
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const response = $input.first().json;\nconst issues = Array.isArray(response) ? response : [];\n\nif (!issues || issues.length === 0) {\n  return [{ json: { action: 'no_issue_found' } }];\n}\n\nconst issueId = issues[0].idReadable;\nconst restartCount = $('Record Restart Time').first().json.restartCount || 1;\nconst TOKEN = 'REDACTED_YT_TOKEN';\nconst BASE = 'https://youtrack.example.net/api';\nconst headers = { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' };\n\nconst commentBody = 'WAL Self-Healer: Auto-resolved.\\n\\nPod restarted and compaction recovered successfully (verified after 3min wait).\\nTotal auto-restarts: ' + restartCount + '\\n\\nNo further action required.';\n\ntry {\n  await fetch(BASE + '/issues/' + issueId + '/comments', { method: 'POST', headers, body: JSON.stringify({ text: commentBody }) });\n} catch(e) {}\n\ntry {\n  await fetch(BASE + '/commands', { method: 'POST', headers, body: JSON.stringify({ query: 'state To Verify', issues: [{ idReadable: issueId }] }) });\n} catch(e) {}\n\nreturn [{ json: { action: 'closed', issueId } }];"
+        },
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Respond OK",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Parse & Validate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse & Validate": {
+        "main": [
+          [
+            {
+              "node": "Is Valid Alert?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Valid Alert?": {
+        "main": [
+          [
+            {
+              "node": "Check Cooldown",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Check Cooldown": {
+        "main": [
+          [
+            {
+              "node": "Within Cooldown?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Within Cooldown?": {
+        "main": [
+          [
+            {
+              "node": "Post Cooldown Escalation",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Restart Prometheus Pod",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Restart Prometheus Pod": {
+        "main": [
+          [
+            {
+              "node": "Record Restart Time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record Restart Time": {
+        "main": [
+          [
+            {
+              "node": "Post Restart Notice",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Restart Notice": {
+        "main": [
+          [
+            {
+              "node": "Wait for Recovery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait for Recovery": {
+        "main": [
+          [
+            {
+              "node": "Check Compaction Health",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Compaction Health": {
+        "main": [
+          [
+            {
+              "node": "Parse Recovery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Recovery": {
+        "main": [
+          [
+            {
+              "node": "Recovered?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Recovered?": {
+        "main": [
+          [
+            {
+              "node": "Post Recovery Success",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Post Recovery Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Recovery Success": {
+        "main": [
+          [
+            {
+              "node": "Find YT Issue",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find YT Issue": {
+        "main": [
+          [
+            {
+              "node": "Close YT Issue",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Redrick Schuhart",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-03-25T17:36:42.157Z",
+        "id": 950,
+        "workflowId": "MIryOuC73LAbIT6D",
+        "versionId": "c87a25dc-28c3-4997-a066-2d3960dde1c3",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      },
+      {
+        "createdAt": "2026-03-25T17:36:42.116Z",
+        "id": 949,
+        "workflowId": "MIryOuC73LAbIT6D",
+        "versionId": "c87a25dc-28c3-4997-a066-2d3960dde1c3",
+        "event": "deactivated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    ]
+  }
+}
