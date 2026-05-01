@@ -1,0 +1,391 @@
+# Claude Gateway CI/CD Pipeline
+# Automated MR review via Claude Code + workflow validation + GitHub sync
+
+image: python:3.12-slim
+
+# Cancel older still-running pipelines on the same ref when a newer commit
+# arrives, but only for jobs that opt in via `interruptible: true`. This
+# keeps long-running expensive jobs (claude_review, sync_to_github) from
+# stacking up on a rapid push burst -- the latest push's run becomes the
+# canonical one, intermediate runs get superseded cleanly.
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
+stages:
+  - validate
+  - test
+  - eval
+  - review
+  - sync
+
+variables:
+  GIT_DEPTH: 0
+
+# ─── Validate: n8n workflow JSON syntax ───
+validate_workflows:
+  stage: validate
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - workflows/*.json
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - workflows/*.json
+  script:
+    - echo "Validating workflow JSON files..."
+    - |
+      ERRORS=0
+      for f in workflows/*.json; do
+        if ! python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
+          echo "INVALID JSON: $f"
+          ERRORS=$((ERRORS + 1))
+        else
+          NODES=$(python3 -c "import json; print(len(json.load(open('$f')).get('nodes', [])))")
+          echo "OK: $f ($NODES nodes)"
+        fi
+      done
+      if [ $ERRORS -gt 0 ]; then
+        echo "FAILED: $ERRORS invalid workflow files"
+        exit 1
+      fi
+      echo "All workflow files valid"
+  tags:
+    - docker
+
+# ─── Validate: shell script syntax ───
+validate_scripts:
+  stage: validate
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - openclaw/skills/**/*.sh
+        - scripts/*.sh
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - openclaw/skills/**/*.sh
+        - scripts/*.sh
+  script:
+    - echo "Checking shell script syntax..."
+    - |
+      ERRORS=0
+      for f in $(find openclaw/skills scripts -name '*.sh' -type f 2>/dev/null); do
+        if ! bash -n "$f" 2>/dev/null; then
+          echo "SYNTAX ERROR: $f"
+          ERRORS=$((ERRORS + 1))
+        else
+          echo "OK: $f"
+        fi
+      done
+      if [ $ERRORS -gt 0 ]; then
+        echo "FAILED: $ERRORS scripts with syntax errors"
+        exit 1
+      fi
+      echo "All scripts valid"
+  tags:
+    - docker
+
+# ─── Test: golden test suite (offline subset) ───
+test-golden-offline:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - openclaw/skills/**/*.sh
+        - openclaw/SOUL.md
+        - scripts/*.sh
+        - scripts/*.py
+        - workflows/*.json
+        - a2a/**/*
+  script:
+    - echo "Running offline golden tests (syntax + JSON + guardrails + agent cards)..."
+    - bash scripts/golden-test-suite.sh --offline
+  tags:
+    - docker
+
+# ─── Test: triage script syntax + shellcheck ───
+test-triage-syntax:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - echo "Running bash -n syntax check on all triage scripts..."
+    - |
+      ERRORS=0
+      for f in $(find openclaw/skills -name '*.sh' -type f 2>/dev/null) \
+               $(find scripts -name '*.sh' -type f 2>/dev/null) \
+               test-e2e-infra-triage.sh; do
+        if [ ! -f "$f" ]; then continue; fi
+        if ! bash -n "$f" 2>&1; then
+          echo "SYNTAX ERROR: $f"
+          ERRORS=$((ERRORS + 1))
+        else
+          echo "OK: $f"
+        fi
+      done
+      if [ $ERRORS -gt 0 ]; then
+        echo "FAILED: $ERRORS scripts with syntax errors"
+        exit 1
+      fi
+      echo "All triage scripts pass bash -n"
+    - echo "Running shellcheck (if available)..."
+    - |
+      if command -v shellcheck >/dev/null 2>&1; then
+        SC_ERRORS=0
+        for f in openclaw/skills/infra-triage/infra-triage.sh \
+                 openclaw/skills/k8s-triage/k8s-triage.sh \
+                 openclaw/skills/correlated-triage/correlated-triage.sh \
+                 openclaw/skills/site-config.sh \
+                 scripts/maintenance-companion.sh \
+                 test-e2e-infra-triage.sh; do
+          if [ ! -f "$f" ]; then continue; fi
+          echo "shellcheck: $f"
+          if ! shellcheck -S warning -e SC1090,SC1091,SC2029,SC2086,SC2155 "$f"; then
+            SC_ERRORS=$((SC_ERRORS + 1))
+          fi
+        done
+        if [ $SC_ERRORS -gt 0 ]; then
+          echo "WARNING: $SC_ERRORS scripts have shellcheck warnings"
+        else
+          echo "All scripts pass shellcheck"
+        fi
+      else
+        echo "shellcheck not installed — skipping (bash -n already passed)"
+      fi
+  tags:
+    - docker
+
+# ─── Test: E2E infra triage pipeline ───
+test-triage-e2e:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  timeout: 10 minutes
+  script:
+    - echo "Running E2E infra triage tests (light mode)..."
+    - bash test-e2e-infra-triage.sh --light 2>&1
+  tags:
+    - docker
+
+# ─── Test: workflow JSON structure validation ───
+test-workflow-validate:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - echo "Validating workflow JSON files have required fields..."
+    - |
+      ERRORS=0
+      for f in workflows/*.json; do
+        if [ ! -f "$f" ]; then continue; fi
+        RESULT=$(python3 -c "
+      import json, sys
+      try:
+          wf = json.load(open('$f'))
+      except json.JSONDecodeError as e:
+          print(f'INVALID JSON: {e}')
+          sys.exit(1)
+      missing = []
+      for field in ['id', 'name', 'nodes']:
+          if field not in wf:
+              missing.append(field)
+      if missing:
+          print('MISSING FIELDS: ' + ', '.join(missing))
+          sys.exit(1)
+      nodes = wf.get('nodes', [])
+      print(f'OK ({len(nodes)} nodes, name={wf[\"name\"][:60]})')
+      " 2>&1)
+        STATUS=$?
+        if [ $STATUS -ne 0 ]; then
+          echo "FAIL: $f — $RESULT"
+          ERRORS=$((ERRORS + 1))
+        else
+          echo "OK: $f — $RESULT"
+        fi
+      done
+      if [ $ERRORS -gt 0 ]; then
+        echo "FAILED: $ERRORS workflow files missing required fields"
+        exit 1
+      fi
+      echo "All workflow files have required fields (id, name, nodes)"
+  tags:
+    - docker
+
+# ─── Validate: SBOM generation (CycloneDX) ───
+generate-sbom:
+  stage: validate
+  image: node:20-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - package-lock.json
+        - package.json
+        - mcp-proxmox/package-lock.json
+        - visual-audit/package-lock.json
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+      when: manual
+      allow_failure: true
+  before_script:
+    - npm install -g @cyclonedx/cyclonedx-npm 2>/dev/null
+    - apt-get update -qq && apt-get install -y -qq python3 python3-pip >/dev/null 2>&1
+    - pip3 install cyclonedx-bom --break-system-packages >/dev/null 2>&1
+  script:
+    - echo "Generating CycloneDX SBOMs..."
+    - npx @cyclonedx/cyclonedx-npm --package-lock-only --output-format JSON --spec-version 1.6 --output-file sbom-npm.cdx.json || echo "npm SBOM generation failed (non-fatal)"
+    - cyclonedx-py environment --output-format json --spec-version 1.6 -o sbom-python.cdx.json || echo "Python SBOM generation failed (non-fatal)"
+    - |
+      echo "SBOM Summary:"
+      for f in sbom-npm.cdx.json sbom-python.cdx.json; do
+        if [ -f "$f" ]; then
+          COUNT=$(python3 -c "import json; print(len(json.load(open('$f')).get('components', [])))" 2>/dev/null || echo "0")
+          echo "  $f: $COUNT components"
+        else
+          echo "  $f: not generated"
+        fi
+      done
+  artifacts:
+    paths:
+      - sbom-npm.cdx.json
+      - sbom-python.cdx.json
+    expire_in: 90 days
+    reports:
+      cyclonedx:
+        - sbom-npm.cdx.json
+        - sbom-python.cdx.json
+  tags:
+    - docker
+
+# ─── Eval: regression gate (blocks MR merge on failure) ───
+eval-regression:
+  stage: eval
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - scripts/**/*
+        - workflows/**/*
+        - openclaw/**/*
+        - .gitlab-ci.yml
+  script:
+    - bash scripts/golden-test-suite.sh --set regression --offline
+  allow_failure: false
+  tags:
+    - docker
+
+# ─── Review: Claude Code automated MR review ───
+claude_review:
+  stage: review
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null 2>&1
+  script:
+    - echo "Running Claude Code MR review..."
+    - |
+      # SSH to app-user host to run review (Claude Code runs there)
+      ssh -i /home/app-user/.ssh/one_key -o StrictHostKeyChecking=no \
+        app-user@nl-claude01 \
+        "cd ~/gitlab/n8n/claude-gateway && ./scripts/mr-review.sh $CI_PROJECT_ID $CI_MERGE_REQUEST_IID"
+  tags:
+    - docker
+
+# ─── Sync: GitHub public mirror ───
+sync_to_github:
+  stage: sync
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+  # Serialize across pipelines: GitHub force-pushes from concurrent runs race
+  # on `refs/heads/main`'s server-side CAS check (caught 2026-05-01 job
+  # 222370 in pipeline 25551: "cannot lock ref 'refs/heads/main': is at X
+  # but expected Y"). resource_group guarantees only one sync_to_github
+  # executes at a time, regardless of how many pipelines are queued.
+  # Bumped from `github_mirror_push` -> `_v2` 2026-05-01 16:25 because the
+  # original lock was orphaned: pipeline 25559 stuck in "canceling" since
+  # 16:13:24 (interruptible+resource_group deadlock — see commit-message
+  # explanation below) was holding the lock and wouldn't release without
+  # admin Rails console access. New name = fresh lock, future pipelines
+  # unblocked. Old `github_mirror_push` lock will eventually expire when
+  # GitLab times out or 25559 is reaped.
+  resource_group: github_mirror_push_v2
+  # NOTE: deliberately NOT setting `interruptible: true` here even though
+  # the workflow auto_cancel block at the top of this file would otherwise
+  # benefit. interruptible + resource_group together deadlock: when
+  # auto_cancel signals a still-running job, GitLab transitions it to
+  # "canceling", which holds the resource lock until the runner has fully
+  # torn down (can stall for tens of minutes if mid-apt or mid-clone).
+  # Reproduced 2026-05-01 16:13 with pipeline 25559 stuck "canceling" for
+  # 8+ minutes blocking 25560 "waiting_for_resource". Letting every push's
+  # sync run to completion (no auto-cancel) is the safe trade -- syncs are
+  # short (~3 min) and serialized, so even a burst of 4 pushes drains in
+  # under 15 minutes without races.
+  variables:
+    # Bypass the runner's get_sources entirely. The default GIT_STRATEGY=fetch
+    # has the runner do `git fetch ... refs/pipelines/<id> ...`, which fails
+    # outright if the pipeline ref is transiently missing on Gitaly. Caught
+    # 2026-05-01 job 222320: "fatal: couldn't find remote ref refs/pipelines/
+    # 25538". GIT_STRATEGY=empty makes the runner skip git entirely (verified
+    # in gitlab-runner v18.6.1 shells/abstract.go:740-744 -- RmDir+MkDir, no
+    # fetch); we do our own clone in before_script. The sync flow's
+    # cp -a + rm -rf .git makes the cloned history irrelevant; we only need
+    # the working tree at $CI_COMMIT_SHA.
+    GIT_STRATEGY: empty
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl jq >/dev/null 2>&1
+    - git clone "$CI_REPOSITORY_URL" .
+    - git -c advice.detachedHead=false checkout "$CI_COMMIT_SHA"
+    - pip3 install --break-system-packages git-filter-repo >/dev/null 2>&1
+    - |
+      GITLEAKS_VERSION="8.24.0"
+      curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+        | tar xz -C /usr/local/bin gitleaks
+      gitleaks version
+    - git config --global user.email "ci@example.net"
+    - git config --global user.name "GitHub Sync Bot"
+    - git config --global init.defaultBranch main
+  script:
+    - echo "Syncing sanitized mirror to GitHub..."
+    - |
+      export CI_REPOSITORY_URL="${CI_REPOSITORY_URL}"
+      export GITHUB_REPO="papadopouloskyriakos/agentic-chatops"
+      export GITHUB_TOKEN="${GITHUB_TOKEN}"
+      export REPLACEMENTS_FILE="${CI_PROJECT_DIR}/github-sync/replacements.txt"
+      bash github-sync/sync-to-github.sh --verbose
+  tags:
+    - docker
+
+sync_to_github_dry_run:
+  stage: sync
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  variables:
+    # Same rationale as sync_to_github above (refs/pipelines/<id> ref-missing
+    # transient). MR-event pipelines have the same exposure, so apply the
+    # same workaround for consistency.
+    GIT_STRATEGY: empty
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl jq >/dev/null 2>&1
+    - git clone "$CI_REPOSITORY_URL" .
+    - git -c advice.detachedHead=false checkout "$CI_COMMIT_SHA"
+    - pip3 install --break-system-packages git-filter-repo >/dev/null 2>&1
+    - |
+      GITLEAKS_VERSION="8.24.0"
+      curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+        | tar xz -C /usr/local/bin gitleaks
+      gitleaks version
+    - git config --global user.email "ci@example.net"
+    - git config --global user.name "GitHub Sync Bot"
+    - git config --global init.defaultBranch main
+  script:
+    - echo "Dry run — validating sanitization..."
+    - |
+      export CI_REPOSITORY_URL="${CI_REPOSITORY_URL}"
+      export GITHUB_REPO="papadopouloskyriakos/agentic-chatops"
+      export REPLACEMENTS_FILE="${CI_PROJECT_DIR}/github-sync/replacements.txt"
+      bash github-sync/sync-to-github.sh --dry-run --verbose
+  tags:
+    - docker

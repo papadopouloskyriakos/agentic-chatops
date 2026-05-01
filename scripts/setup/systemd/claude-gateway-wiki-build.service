@@ -1,0 +1,15 @@
+[Unit]
+Description=claude-gateway wiki rebuild (mkdocs + pattern pages)
+Documentation=https://gitlab.example.net/n8n/claude-gateway
+
+[Service]
+Type=oneshot
+User=app-user
+Group=app-user
+Nice=10
+ExecStart=/bin/bash /app/claude-gateway/scripts/build-wiki-site.sh
+# Debounce bursty changes — rapid edits to the same file won't spawn
+# overlapping builds.
+TimeoutStartSec=180
+StandardOutput=append:/home/app-user/logs/claude-gateway/wiki-rebuild.log
+StandardError=append:/home/app-user/logs/claude-gateway/wiki-rebuild.log

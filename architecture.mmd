@@ -1,0 +1,93 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#1e293b',
+    'primaryTextColor': '#f1f5f9',
+    'primaryBorderColor': '#475569',
+    'lineColor': '#94a3b8',
+    'background': '#0f172a',
+    'mainBkg': '#1e293b',
+    'nodeBorder': '#475569',
+    'clusterBkg': '#111827',
+    'clusterBorder': '#374151',
+    'edgeLabelBackground': '#0f172a',
+    'textColor': '#f1f5f9',
+    'fontSize': '14px'
+  },
+  'flowchart': {
+    'rankSpacing': 55,
+    'nodeSpacing': 35,
+    'curve': 'basis',
+    'padding': 20,
+    'htmlLabels': true
+  }
+}}%%
+
+flowchart TD
+    HUMAN["👤 <b>Human Operator</b><br/>Matrix Client  •  YouTrack"]
+
+    subgraph MATRIX["  💬  Matrix Server  —  Self-Hosted  "]
+        direction LR
+        R1["#chatops"] ~~~ R2["#cubeos"] ~~~ R3["#meshsat"]
+    end
+
+    HUMAN -->|"Messages & Issues"| MATRIX
+
+    MATRIX -->|"@openclaw<br/>or unaddressed"| OC
+    MATRIX -->|"@claude<br/>or !command"| BRIDGE
+
+    subgraph T1["  🦞  TIER 1  •  OpenClaw  ——  Fast Triage  (7-21s)  "]
+        direction TB
+        OC["<b>OpenClaw Agent</b><br/><i>GPT-4o via OpenAI  •  500 RPM  •  ~$3-5/mo</i>"]
+        SK1["📋 <b>youtrack-lookup</b><br/><i>Fetches live issue data</i>"]
+        SK2["🚀 <b>escalate-to-claude</b><br/><i>Triggers Tier 2 session</i>"]
+        OC --> SK1
+        OC --> SK2
+    end
+
+    subgraph N8N["  ⚡  n8n Automation  ——  Orchestration  "]
+        direction TB
+        BRIDGE["<b>Matrix Bridge</b><br/><i>!session • !issue • !pipeline • !mode</i>"]
+        RUNNER["<b>Claude Runner</b><br/><i>Lock guard  •  Cooldown  •  SSH exec</i>"]
+        ENDWF["<b>Session End</b><br/><i>Summary → YouTrack comment</i>"]
+        BRIDGE --> RUNNER
+    end
+
+    OC -->|"Answer"| MATRIX
+    SK1 -->|"Live data"| YT["📋 <b>YouTrack</b><br/><i>Issue Tracker</i>"]
+    SK2 -->|"Webhook"| RUNNER
+
+    RUNNER -->|"Response"| MATRIX
+    RUNNER -->|"SSH"| CLI
+    ENDWF -->|"Comment"| YT
+
+    subgraph T2["  🧠  TIER 2  •  Claude Code  ——  Deep Implementation  (5-15 min)  "]
+        direction LR
+        CLI["<b>Claude CLI</b><br/><i>Headless sessions</i>"]
+        CLI --> REPOS["<b>12 Git Repos</b><br/><i>CubeOS • MeshSat</i>"]
+        CLI --> MCP["<b>MCP Servers</b><br/><i>n8n • GitLab • YT</i>"]
+    end
+
+    subgraph INFRA["  🏠  Self-Hosted  •  AS64512  •  Proxmox Homelab  "]
+        direction LR
+        H1["claude01<br/><i>n8n + Claude</i>"] ~~~ H2["openclaw01<br/><i>GPT-4o Agent</i>"] ~~~ H3["gpu01<br/><i>RTX 3090 Ti</i>"] ~~~ H4["Raspberry Pi<br/><i>CubeOS Target</i>"]
+    end
+
+    REPOS -.->|"Runs on"| INFRA
+    MCP -.->|"Connects to"| INFRA
+
+    classDef humanStyle fill:#312e81,stroke:#818cf8,stroke-width:2px,color:#e0e7ff
+    classDef roomStyle fill:#4c1d95,stroke:#a78bfa,stroke-width:2px,color:#ede9fe
+    classDef t1Style fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#d1fae5
+    classDef n8nStyle fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#ffedd5
+    classDef t2Style fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#dbeafe
+    classDef infraStyle fill:#1f2937,stroke:#4b5563,stroke-width:1px,color:#9ca3af
+    classDef ytStyle fill:#312e81,stroke:#818cf8,stroke-width:2px,color:#e0e7ff
+
+    class HUMAN humanStyle
+    class R1,R2,R3 roomStyle
+    class OC,SK1,SK2 t1Style
+    class BRIDGE,RUNNER,ENDWF n8nStyle
+    class CLI,REPOS,MCP t2Style
+    class H1,H2,H3,H4 infraStyle
+    class YT ytStyle

@@ -1,0 +1,1921 @@
+{
+    "updatedAt": "2026-04-09T21:04:02.512Z",
+    "createdAt": "2026-03-29T18:49:36.220Z",
+    "id": "dr37fPJAZ9a3JRdT",
+    "name": "GR - CrowdSec Alert Receiver",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "id": "crowdsec-webhook",
+            "name": "CrowdSec Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                0,
+                0
+            ],
+            "parameters": {
+                "path": "crowdsec-alert-gr",
+                "httpMethod": "POST",
+                "responseMode": "onReceived",
+                "responseCode": 200,
+                "options": {}
+            },
+            "webhookId": "crowdsec-alert-gr-receiver"
+        },
+        {
+            "id": "load-state",
+            "name": "Load State",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                220,
+                0
+            ],
+            "parameters": {
+                "command": "cat /app/cubeos/claude-context/active-crowdsec-alerts-gr.json 2>/dev/null || echo '{}'; echo '---MAINT---'; cat /home/app-user/gateway.maintenance 2>/dev/null || echo 'NONE'; echo '---LEARN---'; sqlite3 /app/cubeos/claude-context/gateway.db \"SELECT scenario||'|'||host FROM crowdsec_scenario_stats WHERE auto_suppressed = 1;\" 2>/dev/null || echo ''",
+                "authentication": "privateKey",
+                "host": "nl-claude01",
+                "port": 22,
+                "username": "app-user"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "parse-alert",
+            "name": "Parse Alert",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                440,
+                0
+            ],
+            "parameters": {
+                "jsCode": "// --- Maintenance mode check ---\nconst sshRaw = $input.first().json.stdout || '';\nconst maintSplit = sshRaw.split('---MAINT---');\nconst stateJson = (maintSplit[0] || '').trim();\nconst maintAndLearn = (maintSplit[1] || 'NONE').trim();\nconst learnSplit = maintAndLearn.split('---LEARN---');\nconst maintRaw = (learnSplit[0] || 'NONE').trim();\n// Parse learning data (auto-suppressed scenarios)\nconst learnPart = learnSplit.length > 1 ? learnSplit[1].trim() : '';\nconst suppressedSet = new Set();\nif (learnPart) {\n  learnPart.split('\\n').forEach(line => {\n    if (line.includes('|')) suppressedSet.add(line.trim());\n  });\n}\nlet maintenanceActive = false;\nlet maintenanceInfo = null;\nif (maintRaw !== 'NONE' && maintRaw !== '') {\n  try { maintenanceInfo = JSON.parse(maintRaw); maintenanceActive = true; }\n  catch(e) { maintenanceActive = true; maintenanceInfo = { reason: maintRaw }; }\n}\nif (maintenanceActive) {\n  const stateB64 = Buffer.from(stateJson || '{}').toString('base64');\n  return [{ json: { hasContent: false, needsYtIssue: false, isRepeat: false, shouldEscalate: false,\n    host: '', scenario: '', sourceIp: '', stateB64,\n    maintenanceSuppressed: true, maintenanceReason: maintenanceInfo?.reason || 'scheduled' }}];\n}\n// --- End maintenance check ---\n\nconst webhookData = $('CrowdSec Webhook').first().json;\nlet body;\nif (webhookData.body && typeof webhookData.body === 'object' && webhookData.body.body) { body = webhookData.body.body; }\nelse if (webhookData.body && typeof webhookData.body === 'object') { body = webhookData.body; }\nelse { body = webhookData; }\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch(e) { body = {}; } }\n\nconst sd = $getWorkflowStaticData('global');\nif (!sd.activeAlerts) sd.activeAlerts = {};\nif (!sd.hostIssues) sd.hostIssues = {};\nif (!sd.currentBurst) sd.currentBurst = { startTime: 0, ips: [], fired: false };\nif (!sd.closedKeys) sd.closedKeys = {};\n\nconst ACTIVE_TTL_MS = 7200000;       // 2h for active decisions\nconst RECOVERED_TTL_MS = 14400000;   // 4h for recovered (keeps issueId)\nconst BURST_WINDOW_MS = 300000;      // 5min\nconst BURST_THRESHOLD = 3;           // 3+ hosts with same IP\nconst CREATION_LOCK_MS = 60000;      // 1min\nconst COOLDOWN_MS = 300000;          // 5min dedup\nconst FLAP_ESCALATE_THRESHOLD = 2;\n\n// Restore from persistent file on first run\nif (Object.keys(sd.activeAlerts).length === 0 && Object.keys(sd.hostIssues).length === 0) {\n  if (stateJson) {\n    try {\n      const loaded = JSON.parse(stateJson);\n      if (loaded && typeof loaded === 'object') {\n        sd.activeAlerts = loaded.activeAlerts || {};\n        sd.hostIssues = loaded.hostIssues || {};\n      }\n    } catch(e) {}\n  }\n}\n\n// Handle registration callback from security-triage.sh\nif (body.action === 'register' && body.dedupKey && body.issueId) {\n  sd.hostIssues[body.dedupKey] = { issueId: body.issueId, registeredAt: Date.now() };\n  const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n  const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n  return [{ json: { hasContent: false, stateB64, host: body.host || '' } }];\n}\n\n// Extract CrowdSec fields\nconst host = body.host || 'unknown';\nconst scenario = body.scenario || '';\nconst eventsCount = body.events_count || 0;\nconst sourceIp = body.source_ip || '';\nconst sourceCn = body.source_cn || '';\nconst sourceAsNumber = body.source_as_number || '';\nconst sourceAsName = body.source_as_name || '';\nconst startAt = body.start_at || '';\nconst stopAt = body.stop_at || '';\nconst decisions = Array.isArray(body.decisions) ? body.decisions : [];\nconst banDuration = decisions.length > 0 ? decisions[0].duration : 'none';\nconst decisionType = decisions.length > 0 ? decisions[0].type : 'none';\n\nif (!scenario || !sourceIp) {\n  const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n  const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n  return [{ json: { hasContent: false, stateB64, host, scenario, sourceIp } }];\n}\n\n// Severity classification from scenario name\nlet severity = 'low';\nif (scenario.match(/CVE|exploit|backdoor|log4j|rce/i)) severity = 'critical';\nelse if (scenario.match(/bf|brute|ssh-bf|http-generic-bf/i)) severity = 'high';\nelse if (scenario.match(/scan|crawl|probing|enum/i)) severity = 'medium';\nelse if (scenario.match(/bad-user-agent|non_statics/i)) severity = 'low';\n\n// MITRE ATT&CK mapping\nconst mitreMap = {\n  'crowdsecurity/ssh-bf': 'T1110.001',\n  'crowdsecurity/ssh-slow-bf': 'T1110.001',\n  'crowdsecurity/http-generic-bf': 'T1110',\n  'crowdsecurity/http-probing': 'T1595.002',\n  'crowdsecurity/http-crawl-non_statics': 'T1595.002',\n  'crowdsecurity/http-sensitive-files': 'T1083',\n  'crowdsecurity/http-bad-user-agent': 'T1595.002',\n  'crowdsecurity/http-sqli-probing': 'T1190',\n  'crowdsecurity/http-xss-probing': 'T1189',\n  'crowdsecurity/http-cve-probing': 'T1190',\n  'crowdsecurity/http-backdoors-attempts': 'T1505.003',\n  'crowdsecurity/http-admin-interface-probing': 'T1190',\n  'crowdsecurity/nginx-req-limit-exceeded': 'T1498',\n  'crowdsecurity/iptables-scan-multi_ports': 'T1046',\n  'crowdsecurity/smtp-spam': 'T1566',\n  'crowdsecurity/dns-poisoning': 'T1557'\n};\nconst mitreId = mitreMap[scenario] || '';\nconst mitreLabel = mitreId ? ' [' + mitreId + ']' : '';\n\n// Check if this scenario+host is auto-suppressed by learning loop\nconst learnKey = scenario + '|' + host;\nconst isAutoSuppressed = suppressedSet.has(learnKey);\nif (isAutoSuppressed && severity !== 'critical') {\n  // Auto-suppressed by learning loop \u2014 skip (critical always bypasses)\n  const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n  const existingStateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n  return [{ json: { hasContent: false, reason: 'auto_suppressed', scenario, host, sourceIp, stateB64: existingStateB64 } }];\n}\n\n// Dedup key: host:scenario:sourceIP\nconst dedupKey = host + ':' + scenario + ':' + sourceIp;\n\n// Short cooldown dedup\nif (sd.closedKeys[dedupKey]) {\n  const closedAge = Date.now() - sd.closedKeys[dedupKey];\n  if (closedAge < COOLDOWN_MS) {\n    const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n    const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n    return [{ json: { hasContent: false, stateB64, host, scenario, sourceIp,\n      suppressed: true, suppressReason: 'cooldown' } }];\n  } else {\n    delete sd.closedKeys[dedupKey];\n  }\n}\n\n// Flap detection + active alert tracking\nlet flapCount = 0;\nlet isRepeat = false;\nlet existingIssueId = '';\nlet commentText = '';\nlet repeatAction = 'none';\nlet shouldEscalate = false;\nlet isBurstCorrelation = false;\nlet burstHosts = '';\n\nconst existing = sd.activeAlerts[dedupKey];\nif (existing) {\n  // Alert already seen\n  if (existing.recoveredAt) {\n    // Was recovered, now firing again = flap\n    existing.flapCount = (existing.flapCount || 0) + 1;\n    delete existing.recoveredAt;\n  }\n  existing.lastSeen = Date.now();\n  existing.count = (existing.count || 1) + 1;\n  flapCount = existing.flapCount || 0;\n  isRepeat = true;\n\n  // Check for existing YT issue via hostIssues\n  const issueEntry = sd.hostIssues[dedupKey];\n  existingIssueId = issueEntry ? issueEntry.issueId || '' : '';\n\n  commentText = 'CrowdSec alert re-fired: ' + scenario.replace('crowdsecurity/', '') + ' from ' + sourceIp +\n    ' on ' + host + ' at ' + new Date().toISOString() +\n    ' (count: ' + existing.count + (flapCount > 0 ? ', flap #' + flapCount : '') + ')';\n\n  if (existingIssueId) {\n    repeatAction = 'check_yt';\n  } else {\n    // No issue yet, check creation lock\n    if (existing.firstSeen && (Date.now() - existing.firstSeen < CREATION_LOCK_MS)) {\n      const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n      const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n      return [{ json: { hasContent: false, stateB64, host, scenario, sourceIp,\n        suppressed: true, suppressReason: 'creation_lock' } }];\n    }\n    isRepeat = false;\n    repeatAction = 'none';\n  }\n} else {\n  // First time seeing this dedup key\n  sd.activeAlerts[dedupKey] = {\n    firstSeen: Date.now(), lastSeen: Date.now(), count: 1, flapCount: 0,\n    host, scenario, sourceIp\n  };\n}\n\n// Burst/cross-host correlation: same sourceIP on 3+ different hosts\nif (severity !== 'low') {\n  const now_b = Date.now();\n  if (sd.currentBurst.startTime && (now_b - sd.currentBurst.startTime > BURST_WINDOW_MS)) {\n    sd.currentBurst = { startTime: 0, ips: [], fired: false };\n  }\n  // Track IPs with their hosts\n  const alreadyTracked = sd.currentBurst.ips.some(e => e.ip === sourceIp && e.host === host);\n  if (!alreadyTracked) {\n    if (!sd.currentBurst.startTime) sd.currentBurst.startTime = now_b;\n    sd.currentBurst.ips.push({ ip: sourceIp, host, scenario });\n  }\n  // Count distinct hosts for this IP\n  const hostsForIp = [...new Set(sd.currentBurst.ips.filter(e => e.ip === sourceIp).map(e => e.host))];\n  if (hostsForIp.length >= BURST_THRESHOLD && !sd.currentBurst.fired) {\n    sd.currentBurst.fired = true;\n    isBurstCorrelation = true;\n    burstHosts = hostsForIp.join(',');\n  }\n}\n\n// Escalation: severity=critical OR flapCount >= 2 OR isBurstCorrelation\nif (severity === 'critical' || flapCount >= FLAP_ESCALATE_THRESHOLD || isBurstCorrelation) {\n  shouldEscalate = true;\n}\n\n// Determine if YT issue needed: high or critical severity\nconst needsYtIssue = (severity === 'critical' || severity === 'high') && !isRepeat;\n\n// TTL pruning\nconst now = Date.now();\nfor (const k of Object.keys(sd.activeAlerts)) {\n  const entry = sd.activeAlerts[k];\n  if (!entry) { delete sd.activeAlerts[k]; continue; }\n  if (entry.recoveredAt) {\n    if (now - entry.recoveredAt > RECOVERED_TTL_MS) delete sd.activeAlerts[k];\n  } else if (entry.lastSeen) {\n    if (now - entry.lastSeen > ACTIVE_TTL_MS) delete sd.activeAlerts[k];\n  } else {\n    delete sd.activeAlerts[k];\n  }\n}\nfor (const k of Object.keys(sd.hostIssues)) {\n  if (sd.hostIssues[k].registeredAt && now - sd.hostIssues[k].registeredAt > RECOVERED_TTL_MS) {\n    delete sd.hostIssues[k];\n  }\n}\nfor (const k of Object.keys(sd.closedKeys)) {\n  if (now - sd.closedKeys[k] > 1800000) delete sd.closedKeys[k];\n}\nif (sd.currentBurst.startTime && (now - sd.currentBurst.startTime > 600000)) {\n  sd.currentBurst = { startTime: 0, ips: [], fired: false };\n}\n\nconst state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\nconst stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n\n// Build Matrix message\nconst sevEmoji = { critical: '\\ud83d\\udd34', high: '\\ud83d\\udfe0', medium: '\\ud83d\\udfe1', low: '\\u26aa' };\nconst emoji = sevEmoji[severity] || '\\u26aa';\nconst flapLabel = flapCount > 0 ? ' [FLAPPING x' + flapCount + ']' : '';\nconst burstLabel = isBurstCorrelation ? ' [BURST: ' + burstHosts + ']' : '';\nconst scenarioShort = scenario.replace('crowdsecurity/', '');\n\nconst matrixBody = emoji + ' [CrowdSec] ' + scenarioShort + mitreLabel + ' on ' + host + flapLabel + burstLabel +\n  '\\nSource: ' + sourceIp + ' (' + sourceCn + (sourceAsName ? ', AS' + sourceAsNumber + ' ' + sourceAsName : '') + ')' +\n  '\\nEvents: ' + eventsCount + ' | Action: ' + decisionType + ' ' + banDuration +\n  (isRepeat && existingIssueId ? '\\nTracking: ' + existingIssueId : '');\n\nconst matrixHtml = emoji + ' <b>[CrowdSec]</b> <code>' + scenarioShort + '</code>' + mitreLabel + ' on <b>' + host + '</b>' + flapLabel + burstLabel +\n  '<br>Source: <code>' + sourceIp + '</code> (' + sourceCn + (sourceAsName ? ', AS' + sourceAsNumber + ' ' + sourceAsName : '') + ')' +\n  '<br>Events: ' + eventsCount + ' | Action: ' + decisionType + ' ' + banDuration +\n  (isRepeat && existingIssueId ? '<br>Tracking: <b>' + existingIssueId + '</b>' : '');\n\n// YT issue fields\nconst ytSummary = 'CrowdSec: ' + scenarioShort + ' from ' + sourceIp + ' on ' + host;\nlet ytDesc = '## CrowdSec Alert\\n\\n| Field | Value |\\n|-------|-------|\\n| Host | `' + host + '` |\\n| Scenario | `' + scenario +\n  ' + '` |\\n| Source IP | ' + sourceIp + ' (' + sourceCn + (sourceAsName ? ', AS' + sourceAsNumber + ' ' + sourceAsName : '') + ') |\\n' +\n  '| Events | ' + eventsCount + ' |\\n| Decision | ' + decisionType + ' ' + banDuration + ' |\\n' +\n  '| Time | ' + startAt + ' to ' + stopAt + ' |\\n' +\n  '| Severity | **' + severity + '** |\\n';\nif (flapCount > 0) ytDesc += '| Flap count | ' + flapCount + ' |\\n';\nif (isBurstCorrelation) ytDesc += '\\n---\\n\\n**Cross-host burst:** ' + burstHosts;\n\nreturn [{ json: {\n  hasContent: true, host, scenario, scenarioShort, eventsCount, sourceIp, sourceCn,\n  sourceAsNumber, sourceAsName, startAt, stopAt, decisions, banDuration, decisionType,\n  severity, dedupKey, flapCount, flapLabel, isBurstCorrelation, burstHosts,\n  isRepeat, existingIssueId, needsYtIssue, shouldEscalate, repeatAction,\n  commentText, matrixBody, matrixHtml, ytSummary, ytDesc, stateB64, mitreId\n} }];"
+            }
+        },
+        {
+            "id": "save-state",
+            "name": "Save State",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                660,
+                0
+            ],
+            "parameters": {
+                "command": "={{ \"echo '\" + $('Parse Alert').first().json.stateB64 + \"' | base64 -d > /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp && mv /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp /app/cubeos/claude-context/active-crowdsec-alerts-gr.json; sqlite3 /app/cubeos/claude-context/gateway.db \\\"INSERT INTO crowdsec_scenario_stats (scenario, host, total_count, last_seen) VALUES ('\" + $('Parse Alert').first().json.scenario + \"', '\" + $('Parse Alert').first().json.host + \"', 1, datetime('now')) ON CONFLICT(scenario, host) DO UPDATE SET total_count = total_count + 1, last_seen = datetime('now');\\\" 2>/dev/null || true\" }}",
+                "authentication": "privateKey",
+                "host": "nl-claude01",
+                "port": 22,
+                "username": "app-user"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "has-content",
+            "name": "Has Content?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                880,
+                0
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "version": 2,
+                        "caseSensitive": true,
+                        "typeValidation": "strict",
+                        "leftValue": ""
+                    },
+                    "combinator": "and",
+                    "conditions": [
+                        {
+                            "id": "has-content-check",
+                            "leftValue": "={{ $('Parse Alert').first().json.hasContent }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true",
+                                "singleValue": true
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "post-alert-matrix",
+            "name": "Post Alert to Matrix",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1100,
+                0
+            ],
+            "parameters": {
+                "method": "PUT",
+                "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/csgr-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+                "authentication": "genericCredentialType",
+                "nodeCredentialType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ msgtype: $('Parse Alert').first().json.severity === 'critical' ? 'm.text' : 'm.notice', body: $('Parse Alert').first().json.matrixBody, format: 'org.matrix.custom.html', formatted_body: $('Parse Alert').first().json.matrixHtml }) }}",
+                "options": {},
+                "sendHeaders": false,
+                "headerParameters": {
+                    "parameters": []
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_MATRIX_CRED",
+                    "name": "Matrix Claude Bot"
+                }
+            }
+        },
+        {
+            "id": "needs-yt-issue",
+            "name": "Needs YT Issue?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1320,
+                200
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "version": 2,
+                        "caseSensitive": true,
+                        "typeValidation": "strict",
+                        "leftValue": ""
+                    },
+                    "combinator": "and",
+                    "conditions": [
+                        {
+                            "id": "needs-yt-check",
+                            "leftValue": "={{ $('Parse Alert').first().json.needsYtIssue }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true",
+                                "singleValue": true
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "has-existing-issue",
+            "name": "Has Existing Issue?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1540,
+                200
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "version": 2,
+                        "caseSensitive": true,
+                        "typeValidation": "strict",
+                        "leftValue": ""
+                    },
+                    "combinator": "and",
+                    "conditions": [
+                        {
+                            "id": "existing-issue-check",
+                            "leftValue": "={{ $('Parse Alert').first().json.existingIssueId }}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "notEmpty",
+                                "singleValue": true
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "should-escalate",
+            "name": "Should Escalate?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1320,
+                -200
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "version": 2,
+                        "caseSensitive": true,
+                        "typeValidation": "strict",
+                        "leftValue": ""
+                    },
+                    "combinator": "and",
+                    "conditions": [
+                        {
+                            "id": "escalate-check",
+                            "leftValue": "={{ $('Parse Alert').first().json.shouldEscalate }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true",
+                                "singleValue": true
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "acquire-triage-lock",
+            "name": "Acquire Triage Lock",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                1540,
+                -350
+            ],
+            "parameters": {
+                "authentication": "privateKey",
+                "command": "=LOCK_DIR=\"/tmp/cs-triage-lock-gr-{{ $('Parse Alert').first().json.sourceIp.replace(/\\./g, '-') }}\"\nif mkdir \"$LOCK_DIR\" 2>/dev/null; then\n  echo \"PROCEED\"\n  (sleep 300 && rmdir \"$LOCK_DIR\" 2>/dev/null) </dev/null >/dev/null 2>&1 &\nelse\n  echo \"LOCKED\"\nfi"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "lock-ok",
+            "name": "Lock OK",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1760,
+                -350
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "version": 2,
+                        "caseSensitive": true,
+                        "typeValidation": "strict"
+                    },
+                    "combinator": "and",
+                    "conditions": [
+                        {
+                            "id": "lock-ok-check",
+                            "operator": {
+                                "type": "string",
+                                "operation": "contains"
+                            },
+                            "leftValue": "={{ $json.stdout }}",
+                            "rightValue": "PROCEED"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "post-triage",
+            "name": "Post Triage Instruction",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                1980,
+                -350
+            ],
+            "parameters": {
+                "authentication": "privateKey",
+                "command": "={{ '/app/claude-gateway/scripts/run-triage.sh security ' + ' ' + JSON.stringify(($('Parse Alert').first().json.sourceIp) || '') + ' ' + JSON.stringify(('CrowdSec: ' + $('Parse Alert').first().json.scenarioShort) || '') + ' ' + JSON.stringify(($('Parse Alert').first().json.severity) || '') + ' ' + JSON.stringify(('crowdsec-' + $('Parse Alert').first().json.host) || '') }}",
+                "options": {}
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true,
+            "onError": "continueRegularOutput"
+        },
+        {
+            "id": "fetch-issue-state",
+            "name": "Fetch Issue State",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1760,
+                100
+            ],
+            "parameters": {
+                "method": "GET",
+                "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alert').first().json.existingIssueId }}?fields=id,idReadable,customFields(name,value(name))",
+                "authentication": "genericCredentialType",
+                "options": {},
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Accept",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_YT_CRED",
+                    "name": "YouTrack API Token"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "eval-repeat",
+            "name": "Evaluate Repeat Action",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1980,
+                100
+            ],
+            "parameters": {
+                "jsCode": "const parseAlert = $('Parse Alert').first().json;\nconst ytResponse = $input.first().json;\nlet repeatAction = 'comment';\nlet ytState = 'unknown';\ntry {\n  const customFields = ytResponse.customFields || [];\n  const stateField = customFields.find(f => f.name === 'State');\n  if (stateField && stateField.value) {\n    ytState = stateField.value.name || 'unknown';\n  }\n} catch(e) {\n  ytState = 'unknown';\n}\nif (!ytResponse.id && !ytResponse.idReadable) {\n  repeatAction = 'new';\n} else if (ytState === 'Done' || ytState === 'Cancelled' || ytState === 'Duplicate') {\n  repeatAction = 'new';\n  const sd = $getWorkflowStaticData('global');\n  if (sd.hostIssues && sd.hostIssues[parseAlert.dedupKey]) {\n    sd.hostIssues[parseAlert.dedupKey].issueId = null;\n  }\n} else if (ytState === 'To Verify') {\n  repeatAction = 'reopen';\n} else {\n  repeatAction = 'comment';\n}\nreturn [{ json: { ...parseAlert, repeatAction, ytState } }];"
+            }
+        },
+        {
+            "id": "repeat-action-switch",
+            "name": "Repeat Action",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3,
+            "position": [
+                2200,
+                100
+            ],
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "outputKey": "comment",
+                            "conditions": {
+                                "options": {
+                                    "version": 2,
+                                    "caseSensitive": true,
+                                    "typeValidation": "strict"
+                                },
+                                "combinator": "and",
+                                "conditions": [
+                                    {
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        },
+                                        "leftValue": "={{ $json.repeatAction }}",
+                                        "rightValue": "comment"
+                                    }
+                                ]
+                            },
+                            "renameOutput": true
+                        },
+                        {
+                            "outputKey": "reopen",
+                            "conditions": {
+                                "options": {
+                                    "version": 2,
+                                    "caseSensitive": true,
+                                    "typeValidation": "strict"
+                                },
+                                "combinator": "and",
+                                "conditions": [
+                                    {
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        },
+                                        "leftValue": "={{ $json.repeatAction }}",
+                                        "rightValue": "reopen"
+                                    }
+                                ]
+                            },
+                            "renameOutput": true
+                        },
+                        {
+                            "outputKey": "new",
+                            "conditions": {
+                                "options": {
+                                    "version": 2,
+                                    "caseSensitive": true,
+                                    "typeValidation": "strict"
+                                },
+                                "combinator": "and",
+                                "conditions": [
+                                    {
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        },
+                                        "leftValue": "={{ $json.repeatAction }}",
+                                        "rightValue": "new"
+                                    }
+                                ]
+                            },
+                            "renameOutput": true
+                        }
+                    ]
+                },
+                "options": {
+                    "fallbackOutput": "extra"
+                }
+            }
+        },
+        {
+            "id": "post-yt-comment",
+            "name": "Post YT Comment",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2420,
+                100
+            ],
+            "parameters": {
+                "method": "POST",
+                "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alert').first().json.existingIssueId }}/comments?fields=id",
+                "authentication": "genericCredentialType",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ text: $('Parse Alert').first().json.commentText }) }}",
+                "options": {},
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_YT_CRED",
+                    "name": "YouTrack API Token"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "move-to-open",
+            "name": "Move to Open",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2420,
+                0
+            ],
+            "parameters": {
+                "method": "POST",
+                "url": "https://youtrack.example.net/api/commands",
+                "authentication": "genericCredentialType",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Alert').first().json.existingIssueId }], query: 'state Open' }) }}",
+                "options": {},
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_YT_CRED",
+                    "name": "YouTrack API Token"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "post-reopen-comment",
+            "name": "Post Reopen Comment",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2640,
+                0
+            ],
+            "parameters": {
+                "method": "POST",
+                "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alert').first().json.existingIssueId }}/comments?fields=id",
+                "authentication": "genericCredentialType",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ text: 'CrowdSec alert re-detected while issue was in To Verify state. Moving back to Open.\\n\\nScenario: ' + $('Parse Alert').first().json.scenario + '\\nSource: ' + $('Parse Alert').first().json.sourceIp + ' on ' + $('Parse Alert').first().json.host + '\\nSeverity: ' + $('Parse Alert').first().json.severity + '\\nTime: ' + new Date().toISOString() }) }}",
+                "options": {},
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_YT_CRED",
+                    "name": "YouTrack API Token"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "create-yt-issue",
+            "name": "Create YT Issue",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2420,
+                300
+            ],
+            "parameters": {
+                "method": "POST",
+                "url": "https://youtrack.example.net/api/issues?fields=id,idReadable",
+                "authentication": "genericCredentialType",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ project: { id: '0-13' }, summary: $('Parse Alert').first().json.ytSummary, description: $('Parse Alert').first().json.ytDesc, customFields: [ { name: 'Hostname', $type: 'SimpleIssueCustomField', value: $('Parse Alert').first().json.host }, { name: 'Alert Rule', $type: 'SimpleIssueCustomField', value: $('Parse Alert').first().json.scenario }, { name: 'Severity', $type: 'SimpleIssueCustomField', value: $('Parse Alert').first().json.severity }, { name: 'Alert Source', $type: 'SimpleIssueCustomField', value: 'CrowdSec' } ] }) }}",
+                "options": {},
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_YT_CRED",
+                    "name": "YouTrack API Token"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "register-issue",
+            "name": "Register Issue",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2640,
+                300
+            ],
+            "parameters": {
+                "jsCode": "const parseData = $('Parse Alert').first().json;\nconst ytResponse = $input.first().json;\nconst issueId = ytResponse.idReadable || '';\nconst dedupKey = parseData.dedupKey;\nconst sd = $getWorkflowStaticData('global');\nif (!sd.hostIssues) sd.hostIssues = {};\nif (issueId) {\n  sd.hostIssues[dedupKey] = { issueId: issueId, registeredAt: Date.now() };\n}\nconst state = { activeAlerts: sd.activeAlerts || {}, hostIssues: sd.hostIssues };\nconst stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\nreturn [{ json: { ...parseData, registeredIssueId: issueId, stateB64 } }];"
+            }
+        },
+        {
+            "id": "save-issue-state",
+            "name": "Save Issue State",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                2860,
+                300
+            ],
+            "parameters": {
+                "command": "={{ \"echo '\" + $json.stateB64 + \"' | base64 -d > /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp && mv /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp /app/cubeos/claude-context/active-crowdsec-alerts-gr.json\" }}",
+                "authentication": "privateKey",
+                "host": "nl-claude01",
+                "port": 22,
+                "username": "app-user"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true
+        },
+        {
+            "id": "post-issue-notice",
+            "name": "Post Issue Notice",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                3080,
+                300
+            ],
+            "parameters": {
+                "method": "PUT",
+                "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/csgr-yt-{{ Date.now() }}",
+                "authentication": "genericCredentialType",
+                "nodeCredentialType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: '\\ud83d\\udccb Created ' + $('Register Issue').first().json.registeredIssueId + ' for CrowdSec alert: ' + $('Parse Alert').first().json.scenarioShort + ' from ' + $('Parse Alert').first().json.sourceIp + ' on ' + $('Parse Alert').first().json.host, format: 'org.matrix.custom.html', formatted_body: '\\ud83d\\udccb Created <b>' + $('Register Issue').first().json.registeredIssueId + '</b> for CrowdSec alert: <code>' + $('Parse Alert').first().json.scenarioShort + '</code> from <code>' + $('Parse Alert').first().json.sourceIp + '</code> on <b>' + $('Parse Alert').first().json.host + '</b>' }) }}",
+                "options": {},
+                "sendHeaders": false,
+                "headerParameters": {
+                    "parameters": []
+                },
+                "genericAuthType": "httpHeaderAuth"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_MATRIX_CRED",
+                    "name": "Matrix Claude Bot"
+                }
+            }
+        },
+        {
+            "id": "update-scenario-stats",
+            "name": "Update Scenario Stats",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                770,
+                0
+            ],
+            "parameters": {
+                "authentication": "privateKey",
+                "command": "=sqlite3 /app/cubeos/claude-context/gateway.db \"INSERT INTO crowdsec_scenario_stats (scenario, host, total_count, suppressed_count, escalated_count, yt_issues_created, last_seen, last_escalated, auto_suppressed) VALUES ('{{ $(\"Parse Alert\").first().json.scenario || 'unknown' }}', '{{ $(\"Parse Alert\").first().json.host || 'unknown' }}', 1, 0, 0, 0, datetime('now'), NULL, 0) ON CONFLICT(scenario, host) DO UPDATE SET total_count = total_count + 1, last_seen = datetime('now');\" && echo 'stats updated'",
+                "cwd": "/tmp"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true
+        }
+    ],
+    "connections": {
+        "CrowdSec Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Load State",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Load State": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Alert": {
+            "main": [
+                [
+                    {
+                        "node": "Save State",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Has Content?": {
+            "main": [
+                [
+                    {
+                        "node": "Post Alert to Matrix",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Post Alert to Matrix": {
+            "main": [
+                [
+                    {
+                        "node": "Needs YT Issue?",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Should Escalate?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Needs YT Issue?": {
+            "main": [
+                [
+                    {
+                        "node": "Has Existing Issue?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Has Existing Issue?": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Issue State",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Create YT Issue",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Should Escalate?": {
+            "main": [
+                [
+                    {
+                        "node": "Acquire Triage Lock",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Acquire Triage Lock": {
+            "main": [
+                [
+                    {
+                        "node": "Lock OK",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Lock OK": {
+            "main": [
+                [
+                    {
+                        "node": "Post Triage Instruction",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Issue State": {
+            "main": [
+                [
+                    {
+                        "node": "Evaluate Repeat Action",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Evaluate Repeat Action": {
+            "main": [
+                [
+                    {
+                        "node": "Repeat Action",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Repeat Action": {
+            "main": [
+                [
+                    {
+                        "node": "Post YT Comment",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Move to Open",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Create YT Issue",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Move to Open": {
+            "main": [
+                [
+                    {
+                        "node": "Post Reopen Comment",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create YT Issue": {
+            "main": [
+                [
+                    {
+                        "node": "Register Issue",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Register Issue": {
+            "main": [
+                [
+                    {
+                        "node": "Save Issue State",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Issue State": {
+            "main": [
+                [
+                    {
+                        "node": "Post Issue Notice",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save State": {
+            "main": [
+                [
+                    {
+                        "node": "Update Scenario Stats",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Scenario Stats": {
+            "main": [
+                [
+                    {
+                        "node": "Has Content?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "saveDataErrorExecution": "all",
+        "saveDataSuccessExecution": "all",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "a0ada97a-4a1e-4c6c-997f-53a49c6fdb9d",
+    "activeVersionId": "a0ada97a-4a1e-4c6c-997f-53a49c6fdb9d",
+    "versionCounter": 76,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-03-29T18:49:36.221Z",
+            "createdAt": "2026-03-29T18:49:36.221Z",
+            "role": "workflow:owner",
+            "workflowId": "dr37fPJAZ9a3JRdT",
+            "projectId": "CLDM2Ezgw9101HuF",
+            "project": {
+                "updatedAt": "2025-01-28T17:38:17.181Z",
+                "createdAt": "2025-01-28T17:31:03.531Z",
+                "id": "CLDM2Ezgw9101HuF",
+                "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-04-09T21:04:02.513Z",
+        "createdAt": "2026-04-09T21:04:02.513Z",
+        "versionId": "a0ada97a-4a1e-4c6c-997f-53a49c6fdb9d",
+        "workflowId": "dr37fPJAZ9a3JRdT",
+        "nodes": [
+            {
+                "id": "crowdsec-webhook",
+                "name": "CrowdSec Webhook",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2,
+                "position": [
+                    0,
+                    0
+                ],
+                "parameters": {
+                    "path": "crowdsec-alert-gr",
+                    "httpMethod": "POST",
+                    "responseMode": "onReceived",
+                    "responseCode": 200,
+                    "options": {}
+                },
+                "webhookId": "crowdsec-alert-gr-receiver"
+            },
+            {
+                "id": "load-state",
+                "name": "Load State",
+                "type": "n8n-nodes-base.ssh",
+                "typeVersion": 1,
+                "position": [
+                    220,
+                    0
+                ],
+                "parameters": {
+                    "command": "cat /app/cubeos/claude-context/active-crowdsec-alerts-gr.json 2>/dev/null || echo '{}'; echo '---MAINT---'; cat /home/app-user/gateway.maintenance 2>/dev/null || echo 'NONE'; echo '---LEARN---'; sqlite3 /app/cubeos/claude-context/gateway.db \"SELECT scenario||'|'||host FROM crowdsec_scenario_stats WHERE auto_suppressed = 1;\" 2>/dev/null || echo ''",
+                    "authentication": "privateKey",
+                    "host": "nl-claude01",
+                    "port": 22,
+                    "username": "app-user"
+                },
+                "credentials": {
+                    "sshPrivateKey": {
+                        "id": "REDACTED_SSH_CRED",
+                        "name": "nl-claude01 - SSH app-user"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "parse-alert",
+                "name": "Parse Alert",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    440,
+                    0
+                ],
+                "parameters": {
+                    "jsCode": "// --- Maintenance mode check ---\nconst sshRaw = $input.first().json.stdout || '';\nconst maintSplit = sshRaw.split('---MAINT---');\nconst stateJson = (maintSplit[0] || '').trim();\nconst maintAndLearn = (maintSplit[1] || 'NONE').trim();\nconst learnSplit = maintAndLearn.split('---LEARN---');\nconst maintRaw = (learnSplit[0] || 'NONE').trim();\n// Parse learning data (auto-suppressed scenarios)\nconst learnPart = learnSplit.length > 1 ? learnSplit[1].trim() : '';\nconst suppressedSet = new Set();\nif (learnPart) {\n  learnPart.split('\\n').forEach(line => {\n    if (line.includes('|')) suppressedSet.add(line.trim());\n  });\n}\nlet maintenanceActive = false;\nlet maintenanceInfo = null;\nif (maintRaw !== 'NONE' && maintRaw !== '') {\n  try { maintenanceInfo = JSON.parse(maintRaw); maintenanceActive = true; }\n  catch(e) { maintenanceActive = true; maintenanceInfo = { reason: maintRaw }; }\n}\nif (maintenanceActive) {\n  const stateB64 = Buffer.from(stateJson || '{}').toString('base64');\n  return [{ json: { hasContent: false, needsYtIssue: false, isRepeat: false, shouldEscalate: false,\n    host: '', scenario: '', sourceIp: '', stateB64,\n    maintenanceSuppressed: true, maintenanceReason: maintenanceInfo?.reason || 'scheduled' }}];\n}\n// --- End maintenance check ---\n\nconst webhookData = $('CrowdSec Webhook').first().json;\nlet body;\nif (webhookData.body && typeof webhookData.body === 'object' && webhookData.body.body) { body = webhookData.body.body; }\nelse if (webhookData.body && typeof webhookData.body === 'object') { body = webhookData.body; }\nelse { body = webhookData; }\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch(e) { body = {}; } }\n\nconst sd = $getWorkflowStaticData('global');\nif (!sd.activeAlerts) sd.activeAlerts = {};\nif (!sd.hostIssues) sd.hostIssues = {};\nif (!sd.currentBurst) sd.currentBurst = { startTime: 0, ips: [], fired: false };\nif (!sd.closedKeys) sd.closedKeys = {};\n\nconst ACTIVE_TTL_MS = 7200000;       // 2h for active decisions\nconst RECOVERED_TTL_MS = 14400000;   // 4h for recovered (keeps issueId)\nconst BURST_WINDOW_MS = 300000;      // 5min\nconst BURST_THRESHOLD = 3;           // 3+ hosts with same IP\nconst CREATION_LOCK_MS = 60000;      // 1min\nconst COOLDOWN_MS = 300000;          // 5min dedup\nconst FLAP_ESCALATE_THRESHOLD = 2;\n\n// Restore from persistent file on first run\nif (Object.keys(sd.activeAlerts).length === 0 && Object.keys(sd.hostIssues).length === 0) {\n  if (stateJson) {\n    try {\n      const loaded = JSON.parse(stateJson);\n      if (loaded && typeof loaded === 'object') {\n        sd.activeAlerts = loaded.activeAlerts || {};\n        sd.hostIssues = loaded.hostIssues || {};\n      }\n    } catch(e) {}\n  }\n}\n\n// Handle registration callback from security-triage.sh\nif (body.action === 'register' && body.dedupKey && body.issueId) {\n  sd.hostIssues[body.dedupKey] = { issueId: body.issueId, registeredAt: Date.now() };\n  const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n  const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n  return [{ json: { hasContent: false, stateB64, host: body.host || '' } }];\n}\n\n// Extract CrowdSec fields\nconst host = body.host || 'unknown';\nconst scenario = body.scenario || '';\nconst eventsCount = body.events_count || 0;\nconst sourceIp = body.source_ip || '';\nconst sourceCn = body.source_cn || '';\nconst sourceAsNumber = body.source_as_number || '';\nconst sourceAsName = body.source_as_name || '';\nconst startAt = body.start_at || '';\nconst stopAt = body.stop_at || '';\nconst decisions = Array.isArray(body.decisions) ? body.decisions : [];\nconst banDuration = decisions.length > 0 ? decisions[0].duration : 'none';\nconst decisionType = decisions.length > 0 ? decisions[0].type : 'none';\n\nif (!scenario || !sourceIp) {\n  const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n  const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n  return [{ json: { hasContent: false, stateB64, host, scenario, sourceIp } }];\n}\n\n// Severity classification from scenario name\nlet severity = 'low';\nif (scenario.match(/CVE|exploit|backdoor|log4j|rce/i)) severity = 'critical';\nelse if (scenario.match(/bf|brute|ssh-bf|http-generic-bf/i)) severity = 'high';\nelse if (scenario.match(/scan|crawl|probing|enum/i)) severity = 'medium';\nelse if (scenario.match(/bad-user-agent|non_statics/i)) severity = 'low';\n\n// MITRE ATT&CK mapping\nconst mitreMap = {\n  'crowdsecurity/ssh-bf': 'T1110.001',\n  'crowdsecurity/ssh-slow-bf': 'T1110.001',\n  'crowdsecurity/http-generic-bf': 'T1110',\n  'crowdsecurity/http-probing': 'T1595.002',\n  'crowdsecurity/http-crawl-non_statics': 'T1595.002',\n  'crowdsecurity/http-sensitive-files': 'T1083',\n  'crowdsecurity/http-bad-user-agent': 'T1595.002',\n  'crowdsecurity/http-sqli-probing': 'T1190',\n  'crowdsecurity/http-xss-probing': 'T1189',\n  'crowdsecurity/http-cve-probing': 'T1190',\n  'crowdsecurity/http-backdoors-attempts': 'T1505.003',\n  'crowdsecurity/http-admin-interface-probing': 'T1190',\n  'crowdsecurity/nginx-req-limit-exceeded': 'T1498',\n  'crowdsecurity/iptables-scan-multi_ports': 'T1046',\n  'crowdsecurity/smtp-spam': 'T1566',\n  'crowdsecurity/dns-poisoning': 'T1557'\n};\nconst mitreId = mitreMap[scenario] || '';\nconst mitreLabel = mitreId ? ' [' + mitreId + ']' : '';\n\n// Check if this scenario+host is auto-suppressed by learning loop\nconst learnKey = scenario + '|' + host;\nconst isAutoSuppressed = suppressedSet.has(learnKey);\nif (isAutoSuppressed && severity !== 'critical') {\n  // Auto-suppressed by learning loop \u2014 skip (critical always bypasses)\n  const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n  const existingStateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n  return [{ json: { hasContent: false, reason: 'auto_suppressed', scenario, host, sourceIp, stateB64: existingStateB64 } }];\n}\n\n// Dedup key: host:scenario:sourceIP\nconst dedupKey = host + ':' + scenario + ':' + sourceIp;\n\n// Short cooldown dedup\nif (sd.closedKeys[dedupKey]) {\n  const closedAge = Date.now() - sd.closedKeys[dedupKey];\n  if (closedAge < COOLDOWN_MS) {\n    const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n    const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n    return [{ json: { hasContent: false, stateB64, host, scenario, sourceIp,\n      suppressed: true, suppressReason: 'cooldown' } }];\n  } else {\n    delete sd.closedKeys[dedupKey];\n  }\n}\n\n// Flap detection + active alert tracking\nlet flapCount = 0;\nlet isRepeat = false;\nlet existingIssueId = '';\nlet commentText = '';\nlet repeatAction = 'none';\nlet shouldEscalate = false;\nlet isBurstCorrelation = false;\nlet burstHosts = '';\n\nconst existing = sd.activeAlerts[dedupKey];\nif (existing) {\n  // Alert already seen\n  if (existing.recoveredAt) {\n    // Was recovered, now firing again = flap\n    existing.flapCount = (existing.flapCount || 0) + 1;\n    delete existing.recoveredAt;\n  }\n  existing.lastSeen = Date.now();\n  existing.count = (existing.count || 1) + 1;\n  flapCount = existing.flapCount || 0;\n  isRepeat = true;\n\n  // Check for existing YT issue via hostIssues\n  const issueEntry = sd.hostIssues[dedupKey];\n  existingIssueId = issueEntry ? issueEntry.issueId || '' : '';\n\n  commentText = 'CrowdSec alert re-fired: ' + scenario.replace('crowdsecurity/', '') + ' from ' + sourceIp +\n    ' on ' + host + ' at ' + new Date().toISOString() +\n    ' (count: ' + existing.count + (flapCount > 0 ? ', flap #' + flapCount : '') + ')';\n\n  if (existingIssueId) {\n    repeatAction = 'check_yt';\n  } else {\n    // No issue yet, check creation lock\n    if (existing.firstSeen && (Date.now() - existing.firstSeen < CREATION_LOCK_MS)) {\n      const state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\n      const stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n      return [{ json: { hasContent: false, stateB64, host, scenario, sourceIp,\n        suppressed: true, suppressReason: 'creation_lock' } }];\n    }\n    isRepeat = false;\n    repeatAction = 'none';\n  }\n} else {\n  // First time seeing this dedup key\n  sd.activeAlerts[dedupKey] = {\n    firstSeen: Date.now(), lastSeen: Date.now(), count: 1, flapCount: 0,\n    host, scenario, sourceIp\n  };\n}\n\n// Burst/cross-host correlation: same sourceIP on 3+ different hosts\nif (severity !== 'low') {\n  const now_b = Date.now();\n  if (sd.currentBurst.startTime && (now_b - sd.currentBurst.startTime > BURST_WINDOW_MS)) {\n    sd.currentBurst = { startTime: 0, ips: [], fired: false };\n  }\n  // Track IPs with their hosts\n  const alreadyTracked = sd.currentBurst.ips.some(e => e.ip === sourceIp && e.host === host);\n  if (!alreadyTracked) {\n    if (!sd.currentBurst.startTime) sd.currentBurst.startTime = now_b;\n    sd.currentBurst.ips.push({ ip: sourceIp, host, scenario });\n  }\n  // Count distinct hosts for this IP\n  const hostsForIp = [...new Set(sd.currentBurst.ips.filter(e => e.ip === sourceIp).map(e => e.host))];\n  if (hostsForIp.length >= BURST_THRESHOLD && !sd.currentBurst.fired) {\n    sd.currentBurst.fired = true;\n    isBurstCorrelation = true;\n    burstHosts = hostsForIp.join(',');\n  }\n}\n\n// Escalation: severity=critical OR flapCount >= 2 OR isBurstCorrelation\nif (severity === 'critical' || flapCount >= FLAP_ESCALATE_THRESHOLD || isBurstCorrelation) {\n  shouldEscalate = true;\n}\n\n// Determine if YT issue needed: high or critical severity\nconst needsYtIssue = (severity === 'critical' || severity === 'high') && !isRepeat;\n\n// TTL pruning\nconst now = Date.now();\nfor (const k of Object.keys(sd.activeAlerts)) {\n  const entry = sd.activeAlerts[k];\n  if (!entry) { delete sd.activeAlerts[k]; continue; }\n  if (entry.recoveredAt) {\n    if (now - entry.recoveredAt > RECOVERED_TTL_MS) delete sd.activeAlerts[k];\n  } else if (entry.lastSeen) {\n    if (now - entry.lastSeen > ACTIVE_TTL_MS) delete sd.activeAlerts[k];\n  } else {\n    delete sd.activeAlerts[k];\n  }\n}\nfor (const k of Object.keys(sd.hostIssues)) {\n  if (sd.hostIssues[k].registeredAt && now - sd.hostIssues[k].registeredAt > RECOVERED_TTL_MS) {\n    delete sd.hostIssues[k];\n  }\n}\nfor (const k of Object.keys(sd.closedKeys)) {\n  if (now - sd.closedKeys[k] > 1800000) delete sd.closedKeys[k];\n}\nif (sd.currentBurst.startTime && (now - sd.currentBurst.startTime > 600000)) {\n  sd.currentBurst = { startTime: 0, ips: [], fired: false };\n}\n\nconst state = { activeAlerts: sd.activeAlerts, hostIssues: sd.hostIssues };\nconst stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\n\n// Build Matrix message\nconst sevEmoji = { critical: '\\ud83d\\udd34', high: '\\ud83d\\udfe0', medium: '\\ud83d\\udfe1', low: '\\u26aa' };\nconst emoji = sevEmoji[severity] || '\\u26aa';\nconst flapLabel = flapCount > 0 ? ' [FLAPPING x' + flapCount + ']' : '';\nconst burstLabel = isBurstCorrelation ? ' [BURST: ' + burstHosts + ']' : '';\nconst scenarioShort = scenario.replace('crowdsecurity/', '');\n\nconst matrixBody = emoji + ' [CrowdSec] ' + scenarioShort + mitreLabel + ' on ' + host + flapLabel + burstLabel +\n  '\\nSource: ' + sourceIp + ' (' + sourceCn + (sourceAsName ? ', AS' + sourceAsNumber + ' ' + sourceAsName : '') + ')' +\n  '\\nEvents: ' + eventsCount + ' | Action: ' + decisionType + ' ' + banDuration +\n  (isRepeat && existingIssueId ? '\\nTracking: ' + existingIssueId : '');\n\nconst matrixHtml = emoji + ' <b>[CrowdSec]</b> <code>' + scenarioShort + '</code>' + mitreLabel + ' on <b>' + host + '</b>' + flapLabel + burstLabel +\n  '<br>Source: <code>' + sourceIp + '</code> (' + sourceCn + (sourceAsName ? ', AS' + sourceAsNumber + ' ' + sourceAsName : '') + ')' +\n  '<br>Events: ' + eventsCount + ' | Action: ' + decisionType + ' ' + banDuration +\n  (isRepeat && existingIssueId ? '<br>Tracking: <b>' + existingIssueId + '</b>' : '');\n\n// YT issue fields\nconst ytSummary = 'CrowdSec: ' + scenarioShort + ' from ' + sourceIp + ' on ' + host;\nlet ytDesc = '## CrowdSec Alert\\n\\n| Field | Value |\\n|-------|-------|\\n| Host | `' + host + '` |\\n| Scenario | `' + scenario +\n  ' + '` |\\n| Source IP | ' + sourceIp + ' (' + sourceCn + (sourceAsName ? ', AS' + sourceAsNumber + ' ' + sourceAsName : '') + ') |\\n' +\n  '| Events | ' + eventsCount + ' |\\n| Decision | ' + decisionType + ' ' + banDuration + ' |\\n' +\n  '| Time | ' + startAt + ' to ' + stopAt + ' |\\n' +\n  '| Severity | **' + severity + '** |\\n';\nif (flapCount > 0) ytDesc += '| Flap count | ' + flapCount + ' |\\n';\nif (isBurstCorrelation) ytDesc += '\\n---\\n\\n**Cross-host burst:** ' + burstHosts;\n\nreturn [{ json: {\n  hasContent: true, host, scenario, scenarioShort, eventsCount, sourceIp, sourceCn,\n  sourceAsNumber, sourceAsName, startAt, stopAt, decisions, banDuration, decisionType,\n  severity, dedupKey, flapCount, flapLabel, isBurstCorrelation, burstHosts,\n  isRepeat, existingIssueId, needsYtIssue, shouldEscalate, repeatAction,\n  commentText, matrixBody, matrixHtml, ytSummary, ytDesc, stateB64, mitreId\n} }];"
+                }
+            },
+            {
+                "id": "save-state",
+                "name": "Save State",
+                "type": "n8n-nodes-base.ssh",
+                "typeVersion": 1,
+                "position": [
+                    660,
+                    0
+                ],
+                "parameters": {
+                    "command": "={{ \"echo '\" + $('Parse Alert').first().json.stateB64 + \"' | base64 -d > /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp && mv /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp /app/cubeos/claude-context/active-crowdsec-alerts-gr.json; sqlite3 /app/cubeos/claude-context/gateway.db \\\"INSERT INTO crowdsec_scenario_stats (scenario, host, total_count, last_seen) VALUES ('\" + $('Parse Alert').first().json.scenario + \"', '\" + $('Parse Alert').first().json.host + \"', 1, datetime('now')) ON CONFLICT(scenario, host) DO UPDATE SET total_count = total_count + 1, last_seen = datetime('now');\\\" 2>/dev/null || true\" }}",
+                    "authentication": "privateKey",
+                    "host": "nl-claude01",
+                    "port": 22,
+                    "username": "app-user"
+                },
+                "credentials": {
+                    "sshPrivateKey": {
+                        "id": "REDACTED_SSH_CRED",
+                        "name": "nl-claude01 - SSH app-user"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "has-content",
+                "name": "Has Content?",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    880,
+                    0
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "version": 2,
+                            "caseSensitive": true,
+                            "typeValidation": "strict",
+                            "leftValue": ""
+                        },
+                        "combinator": "and",
+                        "conditions": [
+                            {
+                                "id": "has-content-check",
+                                "leftValue": "={{ $('Parse Alert').first().json.hasContent }}",
+                                "rightValue": true,
+                                "operator": {
+                                    "type": "boolean",
+                                    "operation": "true",
+                                    "singleValue": true
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "post-alert-matrix",
+                "name": "Post Alert to Matrix",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1100,
+                    0
+                ],
+                "parameters": {
+                    "method": "PUT",
+                    "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/csgr-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+                    "authentication": "genericCredentialType",
+                    "nodeCredentialType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ msgtype: $('Parse Alert').first().json.severity === 'critical' ? 'm.text' : 'm.notice', body: $('Parse Alert').first().json.matrixBody, format: 'org.matrix.custom.html', formatted_body: $('Parse Alert').first().json.matrixHtml }) }}",
+                    "options": {},
+                    "sendHeaders": false,
+                    "headerParameters": {
+                        "parameters": []
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_MATRIX_CRED",
+                        "name": "Matrix Claude Bot"
+                    }
+                }
+            },
+            {
+                "id": "needs-yt-issue",
+                "name": "Needs YT Issue?",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    1320,
+                    200
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "version": 2,
+                            "caseSensitive": true,
+                            "typeValidation": "strict",
+                            "leftValue": ""
+                        },
+                        "combinator": "and",
+                        "conditions": [
+                            {
+                                "id": "needs-yt-check",
+                                "leftValue": "={{ $('Parse Alert').first().json.needsYtIssue }}",
+                                "rightValue": true,
+                                "operator": {
+                                    "type": "boolean",
+                                    "operation": "true",
+                                    "singleValue": true
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "has-existing-issue",
+                "name": "Has Existing Issue?",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    1540,
+                    200
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "version": 2,
+                            "caseSensitive": true,
+                            "typeValidation": "strict",
+                            "leftValue": ""
+                        },
+                        "combinator": "and",
+                        "conditions": [
+                            {
+                                "id": "existing-issue-check",
+                                "leftValue": "={{ $('Parse Alert').first().json.existingIssueId }}",
+                                "rightValue": "",
+                                "operator": {
+                                    "type": "string",
+                                    "operation": "notEmpty",
+                                    "singleValue": true
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "should-escalate",
+                "name": "Should Escalate?",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    1320,
+                    -200
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "version": 2,
+                            "caseSensitive": true,
+                            "typeValidation": "strict",
+                            "leftValue": ""
+                        },
+                        "combinator": "and",
+                        "conditions": [
+                            {
+                                "id": "escalate-check",
+                                "leftValue": "={{ $('Parse Alert').first().json.shouldEscalate }}",
+                                "rightValue": true,
+                                "operator": {
+                                    "type": "boolean",
+                                    "operation": "true",
+                                    "singleValue": true
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "acquire-triage-lock",
+                "name": "Acquire Triage Lock",
+                "type": "n8n-nodes-base.ssh",
+                "typeVersion": 1,
+                "position": [
+                    1540,
+                    -350
+                ],
+                "parameters": {
+                    "authentication": "privateKey",
+                    "command": "=LOCK_DIR=\"/tmp/cs-triage-lock-gr-{{ $('Parse Alert').first().json.sourceIp.replace(/\\./g, '-') }}\"\nif mkdir \"$LOCK_DIR\" 2>/dev/null; then\n  echo \"PROCEED\"\n  (sleep 300 && rmdir \"$LOCK_DIR\" 2>/dev/null) </dev/null >/dev/null 2>&1 &\nelse\n  echo \"LOCKED\"\nfi"
+                },
+                "credentials": {
+                    "sshPrivateKey": {
+                        "id": "REDACTED_SSH_CRED",
+                        "name": "nl-claude01 - SSH app-user"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "lock-ok",
+                "name": "Lock OK",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    1760,
+                    -350
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "version": 2,
+                            "caseSensitive": true,
+                            "typeValidation": "strict"
+                        },
+                        "combinator": "and",
+                        "conditions": [
+                            {
+                                "id": "lock-ok-check",
+                                "operator": {
+                                    "type": "string",
+                                    "operation": "contains"
+                                },
+                                "leftValue": "={{ $json.stdout }}",
+                                "rightValue": "PROCEED"
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "id": "post-triage",
+                "name": "Post Triage Instruction",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1980,
+                    -350
+                ],
+                "parameters": {
+                    "method": "PUT",
+                    "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/csgr-triage-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+                    "authentication": "genericCredentialType",
+                    "nodeCredentialType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ msgtype: 'm.text', body: '@openclaw use the exec tool to run: ./skills/security-triage/security-triage.sh ' + $('Parse Alert').first().json.sourceIp + ' \"CrowdSec: ' + $('Parse Alert').first().json.scenarioShort + '\" ' + $('Parse Alert').first().json.severity + ' crowdsec-' + $('Parse Alert').first().json.host, format: 'org.matrix.custom.html', formatted_body: '<a href=\"https://matrix.to/#/@openclaw:matrix.example.net\">@openclaw</a> use the exec tool to run: <code>./skills/security-triage/security-triage.sh ' + $('Parse Alert').first().json.sourceIp + ' \"CrowdSec: ' + $('Parse Alert').first().json.scenarioShort + '\" ' + $('Parse Alert').first().json.severity + ' crowdsec-' + $('Parse Alert').first().json.host + '</code>', 'm.mentions': { user_ids: ['@openclaw:matrix.example.net'] } }) }}",
+                    "options": {},
+                    "sendHeaders": false,
+                    "headerParameters": {
+                        "parameters": []
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_MATRIX_CRED",
+                        "name": "Matrix Claude Bot"
+                    }
+                }
+            },
+            {
+                "id": "fetch-issue-state",
+                "name": "Fetch Issue State",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1760,
+                    100
+                ],
+                "parameters": {
+                    "method": "GET",
+                    "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alert').first().json.existingIssueId }}?fields=id,idReadable,customFields(name,value(name))",
+                    "authentication": "genericCredentialType",
+                    "options": {},
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Accept",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_YT_CRED",
+                        "name": "YouTrack API Token"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "eval-repeat",
+                "name": "Evaluate Repeat Action",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    1980,
+                    100
+                ],
+                "parameters": {
+                    "jsCode": "const parseAlert = $('Parse Alert').first().json;\nconst ytResponse = $input.first().json;\nlet repeatAction = 'comment';\nlet ytState = 'unknown';\ntry {\n  const customFields = ytResponse.customFields || [];\n  const stateField = customFields.find(f => f.name === 'State');\n  if (stateField && stateField.value) {\n    ytState = stateField.value.name || 'unknown';\n  }\n} catch(e) {\n  ytState = 'unknown';\n}\nif (!ytResponse.id && !ytResponse.idReadable) {\n  repeatAction = 'new';\n} else if (ytState === 'Done' || ytState === 'Cancelled' || ytState === 'Duplicate') {\n  repeatAction = 'new';\n  const sd = $getWorkflowStaticData('global');\n  if (sd.hostIssues && sd.hostIssues[parseAlert.dedupKey]) {\n    sd.hostIssues[parseAlert.dedupKey].issueId = null;\n  }\n} else if (ytState === 'To Verify') {\n  repeatAction = 'reopen';\n} else {\n  repeatAction = 'comment';\n}\nreturn [{ json: { ...parseAlert, repeatAction, ytState } }];"
+                }
+            },
+            {
+                "id": "repeat-action-switch",
+                "name": "Repeat Action",
+                "type": "n8n-nodes-base.switch",
+                "typeVersion": 3,
+                "position": [
+                    2200,
+                    100
+                ],
+                "parameters": {
+                    "rules": {
+                        "values": [
+                            {
+                                "outputKey": "comment",
+                                "conditions": {
+                                    "options": {
+                                        "version": 2,
+                                        "caseSensitive": true,
+                                        "typeValidation": "strict"
+                                    },
+                                    "combinator": "and",
+                                    "conditions": [
+                                        {
+                                            "operator": {
+                                                "type": "string",
+                                                "operation": "equals"
+                                            },
+                                            "leftValue": "={{ $json.repeatAction }}",
+                                            "rightValue": "comment"
+                                        }
+                                    ]
+                                },
+                                "renameOutput": true
+                            },
+                            {
+                                "outputKey": "reopen",
+                                "conditions": {
+                                    "options": {
+                                        "version": 2,
+                                        "caseSensitive": true,
+                                        "typeValidation": "strict"
+                                    },
+                                    "combinator": "and",
+                                    "conditions": [
+                                        {
+                                            "operator": {
+                                                "type": "string",
+                                                "operation": "equals"
+                                            },
+                                            "leftValue": "={{ $json.repeatAction }}",
+                                            "rightValue": "reopen"
+                                        }
+                                    ]
+                                },
+                                "renameOutput": true
+                            },
+                            {
+                                "outputKey": "new",
+                                "conditions": {
+                                    "options": {
+                                        "version": 2,
+                                        "caseSensitive": true,
+                                        "typeValidation": "strict"
+                                    },
+                                    "combinator": "and",
+                                    "conditions": [
+                                        {
+                                            "operator": {
+                                                "type": "string",
+                                                "operation": "equals"
+                                            },
+                                            "leftValue": "={{ $json.repeatAction }}",
+                                            "rightValue": "new"
+                                        }
+                                    ]
+                                },
+                                "renameOutput": true
+                            }
+                        ]
+                    },
+                    "options": {
+                        "fallbackOutput": "extra"
+                    }
+                }
+            },
+            {
+                "id": "post-yt-comment",
+                "name": "Post YT Comment",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    2420,
+                    100
+                ],
+                "parameters": {
+                    "method": "POST",
+                    "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alert').first().json.existingIssueId }}/comments?fields=id",
+                    "authentication": "genericCredentialType",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ text: $('Parse Alert').first().json.commentText }) }}",
+                    "options": {},
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_YT_CRED",
+                        "name": "YouTrack API Token"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "move-to-open",
+                "name": "Move to Open",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    2420,
+                    0
+                ],
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://youtrack.example.net/api/commands",
+                    "authentication": "genericCredentialType",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ issues: [{ idReadable: $('Parse Alert').first().json.existingIssueId }], query: 'state Open' }) }}",
+                    "options": {},
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_YT_CRED",
+                        "name": "YouTrack API Token"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "post-reopen-comment",
+                "name": "Post Reopen Comment",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    2640,
+                    0
+                ],
+                "parameters": {
+                    "method": "POST",
+                    "url": "=https://youtrack.example.net/api/issues/{{ $('Parse Alert').first().json.existingIssueId }}/comments?fields=id",
+                    "authentication": "genericCredentialType",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ text: 'CrowdSec alert re-detected while issue was in To Verify state. Moving back to Open.\\n\\nScenario: ' + $('Parse Alert').first().json.scenario + '\\nSource: ' + $('Parse Alert').first().json.sourceIp + ' on ' + $('Parse Alert').first().json.host + '\\nSeverity: ' + $('Parse Alert').first().json.severity + '\\nTime: ' + new Date().toISOString() }) }}",
+                    "options": {},
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_YT_CRED",
+                        "name": "YouTrack API Token"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "create-yt-issue",
+                "name": "Create YT Issue",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    2420,
+                    300
+                ],
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://youtrack.example.net/api/issues?fields=id,idReadable",
+                    "authentication": "genericCredentialType",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ project: { id: '0-13' }, summary: $('Parse Alert').first().json.ytSummary, description: $('Parse Alert').first().json.ytDesc, customFields: [ { name: 'Hostname', $type: 'SimpleIssueCustomField', value: $('Parse Alert').first().json.host }, { name: 'Alert Rule', $type: 'SimpleIssueCustomField', value: $('Parse Alert').first().json.scenario }, { name: 'Severity', $type: 'SimpleIssueCustomField', value: $('Parse Alert').first().json.severity }, { name: 'Alert Source', $type: 'SimpleIssueCustomField', value: 'CrowdSec' } ] }) }}",
+                    "options": {},
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_YT_CRED",
+                        "name": "YouTrack API Token"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "register-issue",
+                "name": "Register Issue",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    2640,
+                    300
+                ],
+                "parameters": {
+                    "jsCode": "const parseData = $('Parse Alert').first().json;\nconst ytResponse = $input.first().json;\nconst issueId = ytResponse.idReadable || '';\nconst dedupKey = parseData.dedupKey;\nconst sd = $getWorkflowStaticData('global');\nif (!sd.hostIssues) sd.hostIssues = {};\nif (issueId) {\n  sd.hostIssues[dedupKey] = { issueId: issueId, registeredAt: Date.now() };\n}\nconst state = { activeAlerts: sd.activeAlerts || {}, hostIssues: sd.hostIssues };\nconst stateB64 = Buffer.from(JSON.stringify(state)).toString('base64');\nreturn [{ json: { ...parseData, registeredIssueId: issueId, stateB64 } }];"
+                }
+            },
+            {
+                "id": "save-issue-state",
+                "name": "Save Issue State",
+                "type": "n8n-nodes-base.ssh",
+                "typeVersion": 1,
+                "position": [
+                    2860,
+                    300
+                ],
+                "parameters": {
+                    "command": "={{ \"echo '\" + $json.stateB64 + \"' | base64 -d > /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp && mv /app/cubeos/claude-context/active-crowdsec-alerts-gr.json.tmp /app/cubeos/claude-context/active-crowdsec-alerts-gr.json\" }}",
+                    "authentication": "privateKey",
+                    "host": "nl-claude01",
+                    "port": 22,
+                    "username": "app-user"
+                },
+                "credentials": {
+                    "sshPrivateKey": {
+                        "id": "REDACTED_SSH_CRED",
+                        "name": "nl-claude01 - SSH app-user"
+                    }
+                },
+                "continueOnFail": true
+            },
+            {
+                "id": "post-issue-notice",
+                "name": "Post Issue Notice",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    3080,
+                    300
+                ],
+                "parameters": {
+                    "method": "PUT",
+                    "url": "=https://matrix.example.net/_matrix/client/v3/rooms/!NKosBPujbWMevzHaaM:matrix.example.net/send/m.room.message/csgr-yt-{{ Date.now() }}",
+                    "authentication": "genericCredentialType",
+                    "nodeCredentialType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({ msgtype: 'm.notice', body: '\\ud83d\\udccb Created ' + $('Register Issue').first().json.registeredIssueId + ' for CrowdSec alert: ' + $('Parse Alert').first().json.scenarioShort + ' from ' + $('Parse Alert').first().json.sourceIp + ' on ' + $('Parse Alert').first().json.host, format: 'org.matrix.custom.html', formatted_body: '\\ud83d\\udccb Created <b>' + $('Register Issue').first().json.registeredIssueId + '</b> for CrowdSec alert: <code>' + $('Parse Alert').first().json.scenarioShort + '</code> from <code>' + $('Parse Alert').first().json.sourceIp + '</code> on <b>' + $('Parse Alert').first().json.host + '</b>' }) }}",
+                    "options": {},
+                    "sendHeaders": false,
+                    "headerParameters": {
+                        "parameters": []
+                    },
+                    "genericAuthType": "httpHeaderAuth"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_MATRIX_CRED",
+                        "name": "Matrix Claude Bot"
+                    }
+                }
+            },
+            {
+                "id": "update-scenario-stats",
+                "name": "Update Scenario Stats",
+                "type": "n8n-nodes-base.ssh",
+                "typeVersion": 1,
+                "position": [
+                    770,
+                    0
+                ],
+                "parameters": {
+                    "authentication": "privateKey",
+                    "command": "=sqlite3 /app/cubeos/claude-context/gateway.db \"INSERT INTO crowdsec_scenario_stats (scenario, host, total_count, suppressed_count, escalated_count, yt_issues_created, last_seen, last_escalated, auto_suppressed) VALUES ('{{ $(\"Parse Alert\").first().json.scenario || 'unknown' }}', '{{ $(\"Parse Alert\").first().json.host || 'unknown' }}', 1, 0, 0, 0, datetime('now'), NULL, 0) ON CONFLICT(scenario, host) DO UPDATE SET total_count = total_count + 1, last_seen = datetime('now');\" && echo 'stats updated'",
+                    "cwd": "/tmp"
+                },
+                "credentials": {
+                    "sshPrivateKey": {
+                        "id": "REDACTED_SSH_CRED",
+                        "name": "nl-claude01 - SSH app-user"
+                    }
+                },
+                "continueOnFail": true
+            }
+        ],
+        "connections": {
+            "CrowdSec Webhook": {
+                "main": [
+                    [
+                        {
+                            "node": "Load State",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Load State": {
+                "main": [
+                    [
+                        {
+                            "node": "Parse Alert",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Parse Alert": {
+                "main": [
+                    [
+                        {
+                            "node": "Save State",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Has Content?": {
+                "main": [
+                    [
+                        {
+                            "node": "Post Alert to Matrix",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Post Alert to Matrix": {
+                "main": [
+                    [
+                        {
+                            "node": "Needs YT Issue?",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Should Escalate?",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Needs YT Issue?": {
+                "main": [
+                    [
+                        {
+                            "node": "Has Existing Issue?",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Has Existing Issue?": {
+                "main": [
+                    [
+                        {
+                            "node": "Fetch Issue State",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ],
+                    [
+                        {
+                            "node": "Create YT Issue",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Should Escalate?": {
+                "main": [
+                    [
+                        {
+                            "node": "Acquire Triage Lock",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Acquire Triage Lock": {
+                "main": [
+                    [
+                        {
+                            "node": "Lock OK",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Lock OK": {
+                "main": [
+                    [
+                        {
+                            "node": "Post Triage Instruction",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Fetch Issue State": {
+                "main": [
+                    [
+                        {
+                            "node": "Evaluate Repeat Action",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Evaluate Repeat Action": {
+                "main": [
+                    [
+                        {
+                            "node": "Repeat Action",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Repeat Action": {
+                "main": [
+                    [
+                        {
+                            "node": "Post YT Comment",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ],
+                    [
+                        {
+                            "node": "Move to Open",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ],
+                    [
+                        {
+                            "node": "Create YT Issue",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Move to Open": {
+                "main": [
+                    [
+                        {
+                            "node": "Post Reopen Comment",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Create YT Issue": {
+                "main": [
+                    [
+                        {
+                            "node": "Register Issue",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Register Issue": {
+                "main": [
+                    [
+                        {
+                            "node": "Save Issue State",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Save Issue State": {
+                "main": [
+                    [
+                        {
+                            "node": "Post Issue Notice",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Save State": {
+                "main": [
+                    [
+                        {
+                            "node": "Update Scenario Stats",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Update Scenario Stats": {
+                "main": [
+                    [
+                        {
+                            "node": "Has Content?",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Redrick Schuhart",
+        "name": null,
+        "description": null,
+        "autosaved": false,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-04-09T21:04:03.182Z",
+                "id": 2065,
+                "workflowId": "dr37fPJAZ9a3JRdT",
+                "versionId": "a0ada97a-4a1e-4c6c-997f-53a49c6fdb9d",
+                "event": "activated",
+                "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            },
+            {
+                "createdAt": "2026-04-09T21:04:02.681Z",
+                "id": 2064,
+                "workflowId": "dr37fPJAZ9a3JRdT",
+                "versionId": "a0ada97a-4a1e-4c6c-997f-53a49c6fdb9d",
+                "event": "deactivated",
+                "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        ]
+    }
+}
