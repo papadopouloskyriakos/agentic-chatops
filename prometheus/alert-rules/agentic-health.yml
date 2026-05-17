@@ -1,0 +1,92 @@
+# Deployed to K8s via the IaC tf:
+#   infrastructure/nl/production/k8s/namespaces/monitoring/agentic-health-alerts.tf
+# This YAML is retained because it is consumed by:
+#   - scripts/qa/suites/test-726-prom-alert-rules.sh (promtool test rules)
+#   - prometheus/alert-rules/agentic-health.test.yml fixtures
+# When adding / changing / removing an alert, edit BOTH files. The IaC tf is
+# the deployed truth; this YAML is the test+doc copy. Drift between them is a
+# defect — caught by drift-check sweeps over the kube-prometheus rules tree.
+groups:
+  - name: agentic-health
+    interval: 60s
+    rules:
+      - alert: SkillPrereqMissing
+        expr: min by (skill, kind) (chatops_skill_requires_ok_all) == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "Skill {{ $labels.skill }} ({{ $labels.kind }}) has an unsatisfied prereq"
+          description: >
+            One or more entries in the skill's `requires.bins` or `requires.env`
+            block are not available on the host (binary missing, or env var unset).
+            Full report: `scripts/audit-skill-requires.sh`. Source of truth:
+            `.claude/{{ $labels.kind }}s/.../*.md` frontmatter.
+            Runbook: docs/runbooks/ (general skill-maintenance guidance).
+
+      - alert: SkillMetricsExporterStale
+        expr: time() - chatops_skill_metrics_last_run_timestamp > 1800
+        for: 10m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "skill-metrics exporter has not run in 30+ minutes"
+          description: >
+            `scripts/write-skill-metrics.sh` is cron `*/5` — if its last-run
+            timestamp is more than 30 minutes behind, the cron is wedged
+            or the script is erroring. Check `crontab -l` and run manually
+            to reproduce. Without this exporter, `SkillPrereqMissing`
+            cannot fire.
+
+      # IFRNLLEI01PRD-748 / G1.P0.1 — Long-horizon replay eval
+      - alert: LongHorizonReplayStale
+        expr: time() - chatops_long_horizon_replay_last_run_timestamp > 777600
+        for: 30m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "long-horizon replay has not run in 9+ days"
+          description: >
+            `scripts/long-horizon-replay.py` is wired to a weekly cron
+            (`0 5 * * 1`). If its last-run timestamp is more than 9 days behind
+            (777600s), the weekly run is wedged or the cron entry is missing.
+            Check `crontab -l` and run manually with `--limit 5 --dry-run`
+            to reproduce. Without this exporter the NVIDIA dim #9 long-horizon
+            evaluation pillar regresses to A-.
+
+      # IFRNLLEI01PRD-748 / G1.P0.2 — Jailbreak corpus regression
+      - alert: JailbreakBypassDetected
+        expr: max by (category) (chatops_jailbreak_detector_match_total{status="miss"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "Jailbreak fixture(s) drifted in category {{ $labels.category }}"
+          description: >
+            `scripts/lib/jailbreak_detector.py` produced `expected_categories`
+            mismatches against `scripts/qa/fixtures/jailbreak-corpus.json`.
+            Either the corpus expectations need updating or a regression has
+            been introduced. Run `bash scripts/qa/suites/test-jailbreak-corpus.sh`
+            for the full diff.
+
+      # IFRNLLEI01PRD-749 / G2.P0.3 — Intermediate semantic rail drift
+      - alert: IntermediateRailDriftHigh
+        expr: max by (category) (chatops_intermediate_rail_drift_score) > 0.20
+        for: 24h
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "Intermediate rail drift > 20% in category {{ $labels.category }} for 24h"
+          description: >
+            `scripts/lib/intermediate_rail.py` is flagging > 20% of intermediate
+            steps as out-of-distribution for this alert category. Either the
+            heuristic keyword bucket is too narrow (false positives), the
+            agent is going off-topic (real drift), or Ollama is returning bad
+            classifications. DARK-FIRST: this alert observes only — no Build
+            Prompt blocking. Inspect with:
+            `sqlite3 ~/gitlab/products/cubeos/claude-context/gateway.db "SELECT payload_json FROM event_log WHERE event_type='intermediate_rail_check' AND emitted_at > datetime('now','-24 hours') ORDER BY id DESC LIMIT 20"`

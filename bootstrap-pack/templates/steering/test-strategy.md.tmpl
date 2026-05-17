@@ -1,0 +1,31 @@
+# Steering — Test strategy (cross-cutting, agent-wide)
+
+## Layered pyramid
+
+- Unit tests cover individual functions. Required for every public method.
+- Integration tests cover module-to-module interactions (DB, queue, HTTP boundary).
+- Acceptance tests (Gherkin in `acceptance/*.feature`) cover requirement-level behaviour mapped to REQ-NNN.
+
+## Coverage targets
+
+- Unit: NN% per package (CI enforces)
+- Integration: every feature exercised end-to-end at least once
+- Acceptance: every REQ-NNN has at least one Gherkin scenario
+
+## Test data
+
+- Fixtures live under `tests/fixtures/<feature>/`
+- No production data in test fixtures
+- Synthetic data generation uses `faker` / equivalent (NEVER copy real user data)
+
+## CI gates
+
+- Lint must pass (PROJECT.json#lint_command)
+- Tests must pass (PROJECT.json#test_command)
+- Coverage must meet thresholds
+- High-severity static-analysis findings block merge
+
+## Agent-specific
+
+- Workers that delete or disable tests to make CI green VIOLATE Article I of constitution.md
+- Merge-coordinator's lint+test gate catches this — patches that delete tests fail the lint step

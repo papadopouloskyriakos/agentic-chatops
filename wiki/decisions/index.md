@@ -1,0 +1,162 @@
+# Architectural Decisions
+
+> Extracted from 140 project memory files. Compiled 2026-05-06 00:48 UTC.
+
+- **03_Lab Reference Library Integration**: 03_Lab (~10GB, ~5200 files) integrated into ChatOps/ChatSecOps triage as supplementary reference. lab-lookup skill, SOUL.md, CLAUDE.md, infra-triage Step 2d, k8s-triage Step 2e, Runner Build Prompt labRefStep.
+- **agentic-agriops project — gradual deploy on defra01agri01**: Full project state for the agentic-agriops gradual deploy on defra01agri01 (Frankfurt, ifog.ch). Architecture, decisions, what's done, what's blocked, where to resume.
+- **agentic-agriops 3-lane vision + phased build plan**: Architecture brainstorm 2026-04-27 for what agentic-agriops actually DOES — three lanes (dev flow, support flow, agronomy-advisor) and the phased Phase-A→F build plan to get there. Read after agentic-agriops-project.md (which captures the deploy state) before starting any new lane work.
+- **agentic-agri Matrix room IDs and YouTrack project mapping**: 3 Matrix rooms + 2 YT projects for the agri lanes — the routing table that n8n workflows + agents key off. Created 2026-04-27.
+- **Agentic-platform sweep — 2026-04-24**: 13 open agentic items triaged; 10 closed by code shipped; 3 deferred as operator decisions. One-shot reference for the batch.
+- **Agentic-platform sweep — 2026-04-25**: Post-04-24-batch regression diagnosed + fixed (chaos cmd_start self-flock); node_exporter restored on openclaw01; 3 YT alerts moved to Done.
+- **agentic_patterns_21_21**: 21/21 agentic design patterns — tri-source audited 11/11 dimensions A+ (100%). 16 YT issues implemented 2026-04-07.
+- **agents-cli audit + adoption plan (2026-04-23)**: Deep audit of claude-gateway vs google/agents-cli. 16-dimension scorecard, 10 patterns to steal, 6 to skip, 4-phase adoption plan in /home/app-user/.claude/plans/drifting-napping-donut.md. Plan file approved by ExitPlanMode, but 3 open questions still need user steer before any implementation begins.
+- **alert_pipeline_v2_2026_03_18**: Major alert pipeline upgrade (2026-03-18): flap detection, issue dedup, confidence scoring, error propagation, CI/CD review, retry loops, few-shot prompts, context summarization
+- **Tier 2 allowlist audit 2026-03-28**: Allowlist trimmed 236→50, golden test monthly→biweekly, 7 external proposals audited (2 implemented, 5 skipped)
+- **ASA Weekly Reboot — DISABLED**: EEM watchdog auto-reboot REMOVED from both ASAs on 2026-04-10. Reboot watcher cron disabled.
+- **Atlantis switched to ATLANTIS_TF_DISTRIBUTION=opentofu on nlatlantis01 (2026-04-20)**: Server-side env fix unblocking plans after HashiCorp PGP key expired for Terraform 1.14.9. Host-only change (start-atlantis.sh is not IaC-tracked); should be moved into docker-compose.yml env block on next pass.
+- **Audit remediation 2026-04-09**: Full platform audit remediation. Phase 1 (IFRNLLEI01PRD-411 to 423) + Phase 2 (IFRNLLEI01PRD-424 to 437) — ALL 27 TICKETS DONE as of 2026-04-19 (verified against YT State + code).
+- **AWX project_update 504 pattern on infrastructure/common/production.git**: Recurring transient HTTP 504 on AWX git-fetch from this specific repo, ~once per 2-3 weeks since 2026-01. 5 confirmed instances. Self-heals in 15-20 min.
+- **BGP community scheme for inter-site path selection (YT-200 fix)**: Community origin-tagging at VPS edges + receiver-side LP policy on ASAs, deployed 2026-04-23 to fix GR Prometheus scrape asymmetry. Scales to any future site/edge.
+- **ASA iBGP ECMP -> 1 fix (NL + GR) 2026-04-17**: NL + GR ASA maximum-paths ibgp 4->1. Fixed AWX-to-VPS-loopback recurring timeouts caused by asymmetric ECMP paths dropped as tcp-not-syn.
+- **Budget migration 2026-04-21 — completion state + outstanding items**: xs4all->budget rename + rtr01 WAN-edge isolation migration; completed Steps 1-8; etherchannel attempt aborted after my channel-group 1 mistake caused mgmt outage; rtr01 reload-safety recovered it. Open items for follow-up.
+- **cc-cc migration done — OpenClaw retired (2026-04-29)**: 2026-04-29 — OpenClaw LXC stopped + onboot=0. All 9 alert receivers rewired to call triage scripts via direct SSH to claude01 instead of @openclaw Matrix mention. Webhook→SSH→YT issue chain verified ~6s end to end.
+- **cert-sync playbook — visible unreachable-host banner 2026-04-17**: Added observability banner to sync_certs_to_edge.yml so ignore_unreachable skips are no longer silent. Commit 328c6f7.
+- **chaos_audit_history**: Consolidated chaos-engineering audit history 2026-04-11 → 2026-04-14. Four audit passes, 55 findings total, all fixed. Security posture 9.52/10. CMM Level 2+ (path to L3 documented). Supersedes chaos_audit_20260411, chaos_deep_audit_20260411, chaos_comprehensive_audit_20260414, chaos_audit_remediation_20260414.
+- **chaos_baseline_history**: Chaos baseline plan (2026-04-12) → implementation (2026-04-13) narrative. 13 YT issues (468-480), 10/13 Done, 18 experiments run (15 PASS, 2 DEGRADED, 1 FAIL). iBGP full mesh fix landed as part of Phase 2. Supersedes chaos_baseline_plan + chaos_baseline_impl.
+- **chaos_baseline_metrics_fix_20260416**: Chaos baseline comparison fixed (2026-04-16). Was comparing convergence (~37s) vs wall-clock (~136s) = always SLOW. Now uses recovery_seconds. IP tracking added. Live log race fixed.
+- **chaos_cron_collision_20260423**: 2026-04-23 two chaos drills collided on ~/chaos-state/chaos-active.json at 04:00 UTC producing a spurious "Experiment None FAIL" Matrix message. Failover actually worked. Safeguard gaps identified.
+- **Autonomous chaos-port-shutdown primitive + Freedom-ONT drill**: scripts/chaos-port-shutdown.py runs the full Freedom-ONT drill unattended — shut sw01 port, observe, PoE-recycle restore, write chaos_experiments row. First unattended run 2026-04-23 08:00 CEST. Replaces the manual operator-nudge flow.
+- **chaos_weekly_cron_20260414**: Weekly chaos cron deployed (CMM Level 3). Daily 10:00 UTC cron, self-selecting exercise type. chaos_exercises table, exercise-summary CLI, preflight gate, Matrix notifications.
+- **CLI-session RAG capture pipeline**: 3-tier capture (IFRNLLEI01PRD-646/-647/-648) of interactive Claude Code CLI JSONLs into session_transcripts + tool_call_log + incident_knowledge. Closes the gap where CLI sessions produced knowledge but only cost/tokens were recorded.
+- **CodeGraphContext (CGC) Setup**: Code graph database for CubeOS/MeshSat — Neo4j backend, scheduled reindex (no live watcher), MCP server, 43K nodes across 5 repos
+- **defra01agri01 — agentic system mirror target**: Designated mirror target for gradual deploy of the NL agentic system (n8n + Claude Code + RAG + chaos). Access + baseline specs.
+- **dmz_chaos_engineering**: DMZ cluster monitoring + web service chaos engineering implementation (2026-04-10). Graph redesign, safety calculator, 7 scenarios.
+- **dual_source_audit_2026_04_03**: Comprehensive dual-source audit (Anthropic docs + Gulli book) — hooks, sub-agents, skills, guardrails, sanitization, RAG, VPN fix. 8+1 YT issues.
+- **Dual-WAN VPN full parity (Freedom + xs4all)**: Both NL WANs have full S2S tunnel coverage. Freedom PPPoE outage auto-handled via xs4all failover, QoS cron, SMS alerting, and trained triage scripts.
+- **MeshSat E2E verified**: First real-device E2E test successful — Pi5 AES-256-GCM encrypted SMS decrypted on Android v1.2.1
+- **frigate_doorbell**: Frigate NVR (nlfrigate01) and n8n doorbell workflow — architecture, auth, JWT fix, integrations
+- **GitHub Public Mirror — agentic-chatops**: Auto-synced public mirror at papadopouloskyriakos/agentic-chatops. CI pipeline sanitizes 99 patterns + gitleaks on every push to main.
+- **GitHub Public Mirror Sync (IaC repo)**: IaC repo GitHub sync pipeline — paths, sanitization rules, runner image rebuild process. Second mirror (claude-gateway → agentic-chatops) added 2026-03-24, see github_mirror_chatops.md.
+- **GitHub mirror sync chain hardening (2026-05-01)**: Three classes of failure in claude-gateway sync_to_github pipeline closed in one session. Reference for the gitignore-clean fix, GIT_STRATEGY=empty bypass, and resource_group serialization with the interruptible deadlock workaround.
+- **gitlab_runner_topology**: NL + GR internal GitLab each have ONE online runner with run_untagged=false. NL failure mode = saturation (queued_duration>30m). GR failure mode = tag-less jobs hang 2h → stuck_or_timeout_failure.
+- **golden_ratio_chaos_20260414**: Golden ratio chaos analysis -- max 4 tunnel kills (47/63 safe). Graph connectivity BFS in backend+frontend. 6 new catalog scenarios. Recovery OOB gap fixed. OpenClaw E2E wired. 6 YT issues closed.
+- **gr_chatops_infra**: GR site (gr) ChatOps infrastructure — complete multi-site alert pipeline, triage scripts, n8n workflows, kubeconfig, LibreNMS transport, Alertmanager webhook
+- **GR Claude Agent (grclaude01)**: Claude Code agent at GR site for NL maintenance oversight. VMID 201021201, 10.0.X.X, gr-pve01.
+- **GR iSCSI Server (gr-pve02)**: GR K8s iSCSI storage — ZFS zvols on PERC H710P, architecture, tunables, AWX PVC fix, SeaweedFS migrated to NFS/sdc
+- **GR Prometheus can't scrape VPS edge exporters — path asymmetry vs NL**: GR Prom gets `context deadline exceeded` scraping http://10.255.{2,3}.11:9342 + :9536 (frr + ipsec exporters on CH + NO VPS). NL Prom scrapes the same URLs fine. Surface alert: TargetDown × 2 on GR. Root-cause ticket IFRGRSKG01PRD-200. Filed 2026-04-22.
+- **Grafana dashboards fully IaC-managed + Element-X widget mapping**: All 10 dashboards IaC-managed (MR !245/246/248). 4 embedded in Element-X Matrix rooms with timepicker hidden. Atlantis auto-plan needs manual trigger for JSON-only changes.
+- **HAHA chaos engineering catalog 2026-04-30 (~14 tests, 2 bugs surfaced+fixed)**: Same-day chaos engineering pass over the whole IoT infrastructure (HAHA + FISHA + sidecars + voice pipeline + cluster fencing). 14 tests run, 2 real bugs surfaced and 1 fixed (nodered start timeout 90s→180s); 1 outstanding (fence_pve list TypeError, IFRNLLEI01PRD-806). Empirical confidence table inside.
+- **HAHA reliability hardening 2026-04-30 (Phases 1-5 implemented)**: Same-day follow-up after the 2026-04-27 → 2026-04-30 ~66h HAHA outage. App-level OCF docker monitor_cmd, NFS auto-flush, NFS stale-fh exporter, proactive ARP, host-pressure alerts, Twilio escalation. T1 e2e verified: 18s detect, 3m30s recover.
+- **haha_voice_pe_upgrade**: HA Voice PE firmware — v7 working (v6 upstream + Squeezebox routing), Ollama q4_0 fix, REST sensors FIXED, 2026-03-16 audit fixes
+- **Holistic agentic health script — 100% pass (78/78)**: scripts/holistic-agentic-health.sh tests ALL README-claimed features across 20 sections. First run 91% (5 fixes needed), second run 100%.
+- **ibgp_full_mesh_fix_20260413**: iBGP full mesh routing fix (2026-04-13). next-hop-self force + BFD + table-map SET_SRC. 18 baseline experiments validated. ASA 9.16 limitations documented. Needs IaC sync.
+- **iFog (CH VPS AS34927) drops raw ESP — strongSwan needs encap=yes**: CH VPS xfrm tunnels to peers using plain ESP (IP proto 50) get silently dropped inbound by iFog. Force NAT-T via `encap = yes` in swanctl so ESP rides UDP:4500.
+- **Corosync cluster split incident 2026-04-11**: PVE 5-node cluster split — stale ASA conn table routed nl-pve01 knet via outside_freedom instead of VTI. Fixed by clear conn + timeout floating-conn on both ASAs.
+- **incident_dmz02_oom_shun_20260413**: grdmz02 OOM-killed twice on 2026-04-13, ASA shunned DMZ IP 10.0.X.X causing total network loss
+- **DMZ disk-full pipeline break + resize to 128G + cleanup cron 2026-04-17**: gr-dmz01 / 100% full blocked Ansible tmp-dir creation, producing recurring UNREACHABLE across all portfolio deploy pipelines. Resized both DMZ VMs 64->128G and installed daily cleanup cron.
+- **Freedom ISP PPPoE Outage 2026-04-08**: Freedom PPPoE outage → full remediation session. 5 phases: GR VPN restoration, VPS migration, NAT parity, dmz02 TS fix, operational readiness. Dual-WAN parity achieved. QoS + SMS + triage training.
+- **GR Site Isolation 2026-04-17 (stale IPsec SA)**: NL↔GR VTI/BGP break 2026-04-17 ~05:23 UTC. Root cause = stale IPsec SA on Tunnel4 (Freedom VTI). Fix = `clear crypto ipsec sa peer 203.0.113.X` on NL ASA. Resolved 08:48 UTC.
+- **HAHA NFS stale-fh outage 2026-04-27 → 2026-04-30 (RESOLVED, ~66h 39m)**: Home Assistant down 2026-04-27 14:55 → 2026-04-30 09:34 UTC (~66h 39m). HA Python crashed with Bus error during nfs-group migration; container kept running so Pacemaker never noticed. Apr 30 02:15 weekly-update reboot exposed file02 fh-cache poisoning. Fixed by restarting Pacemaker exportfs resource.
+- **Multi-layer incident 2026-04-17 — consolidated overview**: 4-layer cascade in one day — VTI IPsec SA stale, BGP ECMP asymmetric paths, DMZ disk-full, and silent playbook skips — each hid the next. This is the index; each layer has its own memory.
+- **n8n SQLite mutex timeout incident 2026-04-16**: ~90s n8n outage at 20:12 UTC caused by pve01 IO pressure starving SQLite. Self-healed. Root cause identical to 2026-04-15 pve01 memory pressure class.
+- **Industry benchmark 2026-04-15 — 4.10/5.00 Optimized**: 15-dimension benchmark, 23 sources. 3.73->4.10/5.00 (Optimized, ~90th %ile). 10/10 YT Done. 39/39 E2E certified. All crons wired.
+- **Industry research gaps 2026-04-10**: 14 gaps from 15 industry sources — 14/14 DONE as of 2026-04-19 (YT 424-437 all closed, verified against code).
+- **Infrastructure Integration**: IaC repo integration, LibreNMS alerts, infra triage, Proxmox MCP, PVE drift detection, and operational details
+- **IoT Pacemaker HA Cluster**: 3-node Pacemaker/Corosync IoT cluster (nlcl01iot01/nl-iot02/nlcl01iotarb01) — topology, resources, failover behavior, VMID 666
+- **Local-first judge + synth migration (2026-04-19)**: Moved LLM-as-a-Judge and RAG synth defaults from Haiku to gemma3:12b (Ollama on gpu01). Calibration = 85% agreement, +5pp drift (local is looser). Eliminates ~$5-10/month Haiku spend.
+- **K8s Next Session Tasks**: Two pending tasks for K8s operational readiness — OpenClaw K8s access + Prometheus/Alertmanager/Gatus alert wiring
+- **knowledge_injection**: Knowledge injection into triage pipelines. 51 CLAUDE.md + 200+ memories + compiled wiki (45 articles) surfaced at both tiers via 3-signal RRF. Repo sync cron on openclaw01.
+- **LibreNMS receiver template quirks on gr-pve02**: Two distinct GR LibreNMS receiver bugs that only surface on gr-pve02 — empty %msg substitution and UNKNOWN-classification of "Has worsened" critical transitions
+- **Per-Model LLM Usage Tracking**: llm_usage table, 3-tier token tracking (Tier 0 local GPU, Tier 1 OpenClaw OAuth Sonnet [migrated from OpenAI 2026-04-28 IFRNLLEI01PRD-746], Tier 2 Claude Code), JSONL-based pollers, Prometheus metrics, portfolio live widget. Poller rewrite 2026-04-10. Tier 0 per-call tracking added 2026-04-16. poll-openclaw-usage.sh added 2026-04-28 (replaces poll-openai-usage.sh).
+- **local_n8n_db_snapshot_is_stale**: /tmp/n8n-db.sqlite on nl-claude01 is a stale manual snapshot, not the live DB. Use workflows/ repo exports or n8n-mcp for current state.
+- **maintenance_companion**: Maintenance Companion architecture — hybrid AWX/direct API, self-healing Layer 0, critical service map per PVE host, fallback ladder
+- **Matrix Bridge Architecture**: Matrix Bridge (QGKnHGkw4casiWIU) — 73 nodes. Updated 2026-04-07: typography improvements (blockquote, nested lists, strikethrough, paragraph fix in Prepare Bridge Response markdownToHtml).
+- **MemPalace Integration**: Ported 8 MemPalace patterns to claude-gateway (2026-04-09). Verbatim transcripts, hooks, temporal KG, agent diaries, 5-signal RRF (chaos baselines 5th, weight 0.25), layered injection, contradiction detection. 10 YT issues 401-410 Done.
+- **VPN Mesh Stats API**: Portfolio mesh-stats webhook — live SSH tunnel status, ping latency, RIPE BGP, 9 unique tunnels, standby-aware compound status. Script at scripts/vpn-mesh-stats.py.
+- **MeshSat Mode A — Bundled Direwolf (MESHSAT-514)**: Direwolf bundled in bridge container; key non-obvious facts + four RF-surfaced bugs and their fixes, landed 2026-04-17
+- **MeshSat next session plan**: T-Deck → Pi → SMS → Android → SBD → RockBLOCK → Webhook → MeshSat HUB → PGP Email pipeline
+- **MeshSat session 2026-03-16**: MSVQ-SC compression, Android SMS, field intelligence, full Android parity (7 phases), 59 unit tests, MESHSAT-57 DONE
+- **MeshSat RTL-SDR spectrum analyzer — architecture + constraints**: Non-obvious constraints and design decisions from the 2026-04-17 RTL-SDR spectrum + jamming alert build (5 bands, SSE stream, TAK CoT + hub relay, dashboard widget + /spectrum page, MIL/ITU operator contract, D1-D12 debt closure, MESHSAT-412 Done)
+- **MeshSat zigbee permit-join + cp210x wedge recovery**: Z-Stack 2.7.1 rejects broadcast permit-join with 0xC2 on fresh-restored networks — use unicast self-target; cp210x wedge needs driver unbind/rebind, not just USBDEVFS_RESET
+- **MIL-contract Playwright audit pattern for safety-critical UIs**: Pattern for codifying MIL-STD / ITU / FM doctrine as a per-contract-item Playwright audit. Each contract is a regex/locator, passes recorded to JSON, prevents UI regressions from sneaking past screenshot reviews. First use: MeshSat RF spectrum 2026-04-17 (25 items, widget 11 + page 14).
+- **n8n code-node safety — post 14h-outage guardrails**: Build Prompt dead code removed 2026-04-19 (3 returns → 1, 90KB → 36KB). Validator at scripts/validate-n8n-code-nodes.sh is now the required pre-push gate. The 14h outage class is caught automatically.
+- **n8n Technical Facts and Pitfalls**: Key technical facts about n8n, Claude CLI, expression pitfalls, MCP update safety, webhook registration, and known bugs
+- **NAT/PAT Audit 2026-04-09**: Tri-WAN PAT completed on NL ASA (28 rules). GR ASA NAT_dmz_servers02 /29→/27 fix. Both saved.
+- **notrf01dmz01 + notrf01dmz02 onboarding — in flight 2026-05-05**: Two new public-IP DMZ Docker hosts at Gigahost NO. Unit 1+2+3 done (hardening, UFW, full 6-tunnel IPsec mesh including xs4all via rtr01). Unit 4 (FRR + iBGP) partially up — 3/8 BGP peers established. Plan at /home/app-user/.claude/plans/wobbly-snacking-biscuit.md.
+- **NVIDIA DLI cross-audit 2026-04-29 — IMPLEMENTED**: 15th audit on the system. NVIDIA DLI Agentic-AI 19-transcript course cross-eval. ALL P0+P1 ITEMS SHIPPED 2026-04-29 (umbrella IFRNLLEI01PRD-747, children -748..-751). Score lifted A (4.4) → A+ (4.79).
+- **OOB Access via PiKVM + Cloudflare Tunnel**: BROKEN (2026-03-21) — PiKVM bricked by forced package upgrade. Requires physical access to GR site to recover. Cloudflare tunnel config still exists but PiKVM is offline.
+- **OpenAI Agents SDK adoption batch (2026-04-20)**: 9-issue structural upgrade to the agentic substrate — schema versioning, typed events, handoff envelope, per-turn hooks, rejection taxonomy, compaction, snapshots, agent-as-tool, depth counter + QA suite. Pointers to every runtime component.
+- **OpenClaw Audit & Upgrade — 2026-03-25**: Full compliance audit (Gulli book + Anthropic exam guide), config drift fix (6 files deployed), OpenClaw 2026.3.3→2026.3.23, LXC disk 21→64GB, 13 prioritized findings.
+- **OpenClaw container — SOUL.md / memory-recall / safe-exec already in sync**: Audit 2026-04-24 — three CLAUDE.md "Remaining Roadmap" sync items are stale; files already match container md5
+- **OpenClaw 402 — per-token burst window, not account exhaustion (2026-04-29)**: 2026-04-29 incident corrected. Per-OAuth-token 5-min burst limit, not account-level. Setup-token migration made it worse. The other Claude Code session staying alive proved the Max account itself was healthy.
+- **OpenClaw → Ollama local triage (2026-04-29)**: Wired OpenClaw 4.26 to use local Ollama with qwen2.5:7b after failing to make the claude-cli OAuth path work post Anthropic April-4 OpenClaw policy. Working at ~3 min/call latency, $0 cost. Hardware caps model size at 7-12B on this GPU.
+- **OpenClaw Tier 1 GPT-5.1 → Sonnet OAuth migration plan**: 2026-04-28 audit + plan to replace OpenAI GPT-5.1 in OpenClaw with Sonnet 4.6 via OpenClaw's native --auth-choice claude-cli (Max sub OAuth, $0). Plan file at ~/.claude/plans/replicated-napping-galaxy.md.
+- **OpenClaw 4.10+4.11 Upgrade Audit**: Audit of OpenClaw releases 2026.4.7-4.11 against current system. Version gap 2026.3.3→4.11 (8 releases). Active Memory, Dreaming, memory-wiki, security hardening. Prioritized recommendations.
+- **OpenClaw v2026.4.22 Upgrade Audit**: Pre-decision audit of OpenClaw v2026.4.22 (released 2026-04-23) vs our running v2026.4.11. 11 tags / 716 commits ahead. Relevant fixes, traps, non-applicable items, three paths. DECISION PENDING.
+- **OpenClaw v2026.4.26 upgrade**: 2026-04-29 upgrade from 2026.4.11 to 2026.4.26. Build process, gotchas, persistence, test results.
+- **OpenObserve Grafana datasource deployed via GitOps**: OpenObserve (10.0.181.X:5080) added as Grafana datasource via additionalDataSources in kube-prometheus-stack Helm values
+- **Operational Activation Audit 2026-04-10**: Comprehensive audit scoring operational activation (not just implementation). 21/21 tables populated after remediation. 8 YT issues (445-452).
+- **parsePoll fix 2026-04-25 — 8 bugs across Runner + Bridge**: Three-round deep e2e on Matrix poll formation. Five commits closed eight distinct parsePoll bugs (early-[POLL] hijack, trailing-prose absorption, latent fallback shape, code-fence absorption, parser duplicated in Bridge, single-blank-line break too aggressive, nested sub-bullets absorbed, Markdown horizontal rule absorbed). Live ↔ repo ↔ HEAD all SHA-matched.
+- **PiKVM and LTE Gateway Audit**: Audit of grpikvm01 (PiKVM v3) and grlte01 (Cisco C819G LTE) — config, findings, OOB architecture rationale
+- **Pipeline Hardening (2026-04-01)**: 11 fixes across 5 workflows + 3 scripts. NetBox Step 2-pre in triage, syslog 3-day, [POLL] fallback parser, escalation cooldown 1h, recovery dedup 60s, flapping timeout 4h, watchdog zombie bounce, Parse Response em-dash + [POLL] approval gate regex. All E2E verified.
+- **portfolio_status_page_fix_20260414**: Status page service-health proxy fix (DMZ SNI issue) + P0 accessibility audit fixes deployed 2026-04-14
+- **Preference-iterating prompt patcher (IFRNLLEI01PRD-645)**: N-candidate A/B trial framework for auto-generated prompt patches. Replaces single-shot prompt-improver with policy iteration at the prompt-policy level — prompt-level analogue of RLHF preference iteration without touching model weights.
+- **Prometheus Receiver 'now' temporal dead zone bug fix (2026-04-11)**: Parse Alerts node crashed 30x/day — const now used before declaration. Fixed by replacing with now0. Both NL+GR receivers.
+- **nl-pve01 memory pressure causing apiserver restarts**: PVE01 host 88% RAM (2.5x overcommit, zero swap) starved etcd I/O on ctrl01. 754 apiserver restarts. Mitigated by shutting down androidsdk01.
+- **nl-pve03 capacity pressure (2026-04-22)**: nl-pve03 mirrors pre-remediation pve01 pattern — no swap/zram, sustained 92%+ memory, hosts K8s ctrlr+NMS+GPU inference. Apply same zram fix; OOM blast radius is the K8s control-plane share + LibreNMS + Ollama inference simultaneously.
+- **PVE drift jobs can 1h-timeout on inventory blinks**: sync_pve_drift / detect_pve_lxc_drift can run for an hour deleting dozens of LXCs after a transient PVE inventory blink — needs a sanity cap.
+- **PVE Kernel Maintenance Automation**: Full-site PVE kernel update automation — ALL DONE + dry-run PASS on both sites. 14 playbooks, startup order (5 nodes), 6 AWX templates, maintenance mode (7 workflows), hardened per Proxmox best practices.
+- **PVE Swap Audit 2026-03-25**: Swap configuration audit across all 5 PVE nodes — findings, changes, Proxmox best practices, disk layout
+- **rag_circuit_breakers**: IFRNLLEI01PRD-631 shipped 2026-04-19. 4 named breakers guard RAG external calls (rerank service, Ollama embed, Anthropic Haiku synth, Ollama qwen synth). SQLite-backed state shared across processes; Prometheus gauges + CircuitBreakerOpen alert.
+- **Q2 cross-chunk synthesis in RAG pipeline**: When cross-encoder max < 0.7 on a query (no single doc strongly matches), synthesize an answer from top-10 fresh-query candidates via qwen2.5:7b. Prepended as synthesis row. +13 points hit@5 on 50-query hard eval.
+- **Cross-encoder rerank service on nl-gpu01**: BAAI/bge-reranker-v2-m3 via sentence-transformers as dedicated microservice at nl-gpu01:11436. Replaces Ollama yes/no hack.
+- **risk_based_auto_approval**: IFRNLLEI01PRD-632 wired 2026-04-19. Classify Risk SSH → Build Prompt risk-section → Matrix Bridge [AUTO-RESOLVE] handler. Low-risk diagnostic sessions auto-resolve with m.notice (no ping). session_risk_audit table + weekly invariant check.
+- **rtr01 syslog source-binding fix (2026-04-22)**: IOS-XE F0/0 data-plane ACL logs (fman_fp_image) arrive with no hostname in the syslog header; syslog-ng then falls back to source IP if reverse-DNS fails. Fix = /etc/hosts entry on syslog-ng server. Durable + libc-backed; holistic-health guardrail added.
+- **Runner and Poller Workflow Flows**: Runner (47 nodes incl. Evaluator-Optimizer), Poller (10 nodes), Session End (12 nodes). Updated 2026-04-07: XML-tagged RAG, hybrid RRF, tool profiles, Evaluator-Optimizer (3 new nodes), 16 PII patterns, tool call limit.
+- **S2S Tunnel Benchmark NL<->GR**: IPsec VPN benchmark results, ASA config findings, line speeds, throughput bottleneck analysis (2026-03-21)
+- **Scanner nuclei + testssl silent failure root cause + fix (PATH)**: Both daily security scanners had nuclei + testssl silently failing in the 03:00 cron run because cron's default PATH excludes /usr/local/bin. Fixed by exporting PATH at top of weekly-scan.sh.
+- **SeaweedFS Cross-Site Replication**: SeaweedFS bi-directional filer-sync between NL and GR K8s clusters — architecture, quirks, known limitations, and operational gotchas
+- **SeaweedFS cross-site replication recovery (2026-05-05)**: Two stale-checkpoint failures fixed end-to-end — cross-site filer.sync (since 2025-12-11) AND GR intra-cluster meta_aggregator (since 2025-12-28 / 2026-03-24). Atlantis MRs !290+!291 merged + gRPC KvPut recovery script + runbook committed.
+- **security_alert_receivers**: Security + CrowdSec alert pipelines (4 workflows, 6 CrowdSec hosts), scanner VMs, triage skill (10 steps, 3 TI sources), learning loop, baseline polls, ATT&CK Navigator. 2026-04-07: YT descriptions use markdown tables, triage delegation structured messages, 8 IF node singleValue fixes.
+- **Session DB write-back anomaly pattern**: IFRNLLEI01PRD-457 had 133 JSONL events but 0 messages in sessions DB — Runner write-back may silently fail
+- **Session summary MESHSAT-622**: Compacted session context for MESHSAT-622
+- **Session summary MESHSAT-636**: Compacted session context for MESHSAT-636
+- **Session summary MESHSAT-647**: Compacted session context for MESHSAT-647
+- **Session summary MESHSAT-653**: Compacted session context for MESHSAT-653
+- **Session summary MESHSAT-660**: Compacted session context for MESHSAT-660
+- **Session summary MESHSAT-678**: Compacted session context for MESHSAT-678
+- **IFRNLLEI01PRD-843 SkillPrereqMissing — FIXED 2026-05-05 (commit bf91ab9, local-only push pending)**: SkillPrereqMissing for k8s-diagnostician + drift-check on bin:kubectl was a cron-PATH false-fire. Fixed via `export PATH` in write-skill-metrics.sh + audit-skill-requires.sh (commit bf91ab9). Verified under simulated cron (env -i + PATH=/usr/bin:/bin): bin:kubectl 0->1 both surfaces, _ok_all=1 both, audit 18/18 PASS. Commit on local main; push not yet executed.
+- **Teacher-agent DM audit 2026-04-23**: How to fetch operator DM history from the teacher bot + 4 bugs observed on 2026-04-23 awaiting operator triage
+- **Teacher-agent — all 5 tiers done (IFRNLLEI01PRD-651..-655)**: Feature-complete. Foundation + intelligence + interface + loop + gate. Invariant audit + calibration baseline + ops runbook. 62/62 QA. Real-data calibration pending >=20 operator-graded answers.
+- **Teacher-agent session — 2026-04-21 polish + E2E link audit**: Enhancements after 5-tier MVP closed. Semantic retrieval, wiki-link plumbing, memory+project-docs published to wiki, free-chat E2E proven end-to-end via Matrix API.
+- **n8n template portal submission**: Status and feedback history for the n8n creator portal template submission of the Claude Gateway workflow
+- **Thanos Cross-Site Architecture**: Thanos Query federation NL<->GR via ClusterMesh — FULLY OPERATIONAL (2026-03-21). All gaps resolved, 275 targets visible cross-site.
+- **Tri-source audit implementation (2026-04-07)**: Full implementation of 16 YT issues to reach 11/11 A+ across all dimensions. Hybrid RRF, eval flywheel, Evaluator-Optimizer, deployment guide.
+- **txhou01vps01 onboarding complete (2026-05-06)**: Third edge VPS at iFog Houston, TX. AS64512 IPv6 transit + 7 IPsec tunnels into the mesh + 9 iBGP peers + HAProxy edge serving 9 IPv6 anycasts + omoikane backends. End-to-end on the live status page (5th country site).
+- **Visual Audit and Typography Improvements**: Playwright visual audit suite + formatting improvements across 10 workflows. markdownToHtml (blockquote, nested lists, strikethrough, paragraph fix), progress poller MCP tool names, triage delegation, YT structured comments. 2026-04-07.
+- **VMID UID Schema**: Proxmox VMID encoding scheme — 9-digit structured ID encoding site, node, VLAN, automation tag, and resource ID. Some VMs have drifted from schema.
+- **VPS DMZ /27 route is now BGP-driven (not static) on both VPSs**: Removed `ip route add 10.0.X.X/27 dev xfrm-nl-f/xfrm-nl` lines from /etc/systemd/system/swanctl-loader.service on notrf01vps01 + chzrh01vps01. FRR now installs the /27 via BGP (proto bgp metric 20 via 10.0.X.X). BFD-driven sub-second failover now actually works for DMZ service traffic.
+- **VPS BGP VTI update-source fix**: GR VPS peering used loopback IPs causing ASA next-hop resolution failure + cross-tunnel ECMP asymmetric routing. Fixed 2026-04-14.
+- **VPS ipsec-health cron enabled on both VPSs — chaos engineering implication**: `ipsec-health-check.sh` runs every 2 min on notrf01vps01 and chzrh01vps01 (re-enabled 2026-04-21). Re-initiates any missing strongSwan child SAs via swanctl. Chaos experiments that tear down IPsec tunnels on a VPS will see auto-recovery within 0-2 minutes — factor this into chaos scenarios.
+- **VTI BGP outage investigation 2026-04-11**: NL-GR inter-site VTI tunnels down, BGP not peering, complete GR unreachability from NL. Root cause identified.
+- **vti_dual_wan_lessons**: VTI dual-WAN deployment lessons — CrowdSec bans, netlink buflen, port_nat_t, UFW gaps found during 2026-04-09 session
+- **VTI Migration + BGP Site Subnet Routing**: VTI tunnels (2026-04-09) + full BGP inter-site routing (2026-04-10). No static inter-site routes. 3-tier LP failover: Freedom 200, xs4all 150, FRR transit 100.
+- **Unified Knowledge Base Wiki**: Karpathy-style LLM-compiled wiki in wiki/ — 45 articles from 7+ sources, RAG-integrated, daily cron at 04:30 UTC
+
+## Audit Reports
+
+- [aci-tool-audit.md](../../docs/aci-tool-audit.md)
+- [agentic-patterns-audit.md](../../docs/agentic-patterns-audit.md)
+- [audit-remediation-report-2026-04-09.md](../../docs/audit-remediation-report-2026-04-09.md)
+- [audit-report-2026-04-09.md](../../docs/audit-report-2026-04-09.md)
+- [chaos-engineering-audit-2026-04-14.md](../../docs/chaos-engineering-audit-2026-04-14.md)
+- [chatops-audit-2026-03-24.md](../../docs/chatops-audit-2026-03-24.md)
+- [chatsecops-industry-audit.md](../../docs/chatsecops-industry-audit.md)
+- [evaluation-process.md](../../docs/evaluation-process.md)
+- [nvidia-dli-cross-audit-2026-04-29.md](../../docs/nvidia-dli-cross-audit-2026-04-29.md)
+- [nvidia-dli-cross-audit-rescored-2026-04-29.md](../../docs/nvidia-dli-cross-audit-rescored-2026-04-29.md)
+- [operational-activation-audit-2026-04-10.md](../../docs/operational-activation-audit-2026-04-10.md)
+- [tri-source-audit.md](../../docs/tri-source-audit.md)
+- [tri-source-eval-report-2026-04-07.md](../../docs/tri-source-eval-report-2026-04-07.md)
+- [weekly-eval-baseline-2026-04-20.md](../../docs/weekly-eval-baseline-2026-04-20.md)
+- [wiki-kb-impact-audit.md](../../docs/wiki-kb-impact-audit.md)

@@ -1,0 +1,41 @@
+asyncapi: 3.0.0
+info:
+  title: <project-slug> events
+  version: 0.1.0
+  description: |
+    Event contracts for <project-slug>. Async producers + consumers conform to these
+    schemas; new events require a contract update BEFORE implementation per
+    constitution.md Article III.
+
+servers:
+  nats:
+    host: nats.internal:4222
+    protocol: nats
+
+channels:
+  userRegistered:
+    address: events.user.registered
+    messages:
+      UserRegistered:
+        $ref: '#/components/messages/UserRegistered'
+
+operations:
+  onUserRegistered:
+    action: send
+    channel:
+      $ref: '#/channels/userRegistered'
+    summary: Emitted after a user completes registration
+
+components:
+  messages:
+    UserRegistered:
+      payload:
+        $ref: '#/components/schemas/UserRegisteredPayload'
+  schemas:
+    UserRegisteredPayload:
+      type: object
+      required: [user_id, email, occurred_at]
+      properties:
+        user_id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        occurred_at: {type: string, format: date-time}

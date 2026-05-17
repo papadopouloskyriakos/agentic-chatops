@@ -1,0 +1,117 @@
+{
+  "name": "openclaw",
+  "description": "Level 1/2 infrastructure triage agent — alert dedup, host investigation, confidence scoring, cross-tier reviews",
+  "url": "matrix://matrix.example.net/@openclaw",
+  "provider": {
+    "organization": "Example Corp",
+    "url": "https://example.net"
+  },
+  "version": "2026.4.28",
+  "documentationUrl": "https://gitlab.example.net/n8n/claude-gateway/-/blob/main/docs/a2a-protocol.md",
+
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": true
+  },
+
+  "authentication": {
+    "schemes": ["bearer"],
+    "credentials": "matrix-access-token"
+  },
+
+  "lifecycle": {
+    "status": "active",
+    "deployedAt": "2026-03-18T00:00:00Z",
+    "lastUpdated": "2026-04-28T22:15:00Z",
+    "decommissionProcedure": "docs/agent-decommissioning.md#tier-1-openclaw",
+    "riskClassification": "docs/tool-risk-classification.md"
+  },
+
+  "taskStates": ["submitted", "working", "input-required", "completed", "failed", "canceled"],
+
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["text/plain", "application/json"],
+
+  "skills": [
+    {
+      "id": "infra-triage",
+      "name": "Infrastructure Triage",
+      "description": "L1+L2 infrastructure alert triage: YT dedup, host investigation, confidence scoring",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"],
+      "tags": ["infrastructure", "monitoring", "triage"],
+      "examples": [
+        "Triage a Service up/down alert on nl-pve01",
+        "Investigate high CPU on gr-pve02"
+      ]
+    },
+    {
+      "id": "k8s-triage",
+      "name": "Kubernetes Triage",
+      "description": "Kubernetes alert triage: control plane deep investigation, namespace/pod diagnostics",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"],
+      "tags": ["kubernetes", "monitoring", "triage"]
+    },
+    {
+      "id": "cross-tier-review",
+      "name": "Cross-Tier Review",
+      "description": "Review Claude Code analysis with chain-of-verification (5-step checklist)",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"],
+      "tags": ["review", "quality-assurance"]
+    },
+    {
+      "id": "youtrack-lookup",
+      "name": "YouTrack Lookup",
+      "description": "Fetch issue details, list issues, update state, post comments",
+      "tags": ["issue-tracking"]
+    },
+    {
+      "id": "netbox-lookup",
+      "name": "NetBox Lookup",
+      "description": "CMDB device/VM/IP/VLAN lookup across all sites (310 objects)",
+      "tags": ["cmdb", "inventory"]
+    },
+    {
+      "id": "playbook-lookup",
+      "name": "Playbook Lookup",
+      "description": "Query incident knowledge base for past resolutions",
+      "tags": ["knowledge-base", "rag"]
+    },
+    {
+      "id": "memory-recall",
+      "name": "Memory Recall",
+      "description": "Query episodic memory for past triage outcomes by host/alert",
+      "tags": ["memory", "rag"]
+    },
+    {
+      "id": "proactive-scan",
+      "name": "Proactive Scan",
+      "description": "Daily pre-alert health checks: disk, certs, stale issues, VPN",
+      "tags": ["health-check", "proactive"]
+    }
+  ],
+
+  "_nla2a": {
+    "tier": 1,
+    "model": "claude-cli/claude-sonnet-4-6",
+    "host": "nl-openclaw01",
+    "routing": {
+      "escalateTo": "claude-code",
+      "acceptsFrom": ["alert-pipeline", "human"],
+      "reviewsFor": ["claude-code"]
+    },
+    "limits": {
+      "maxConcurrent": 1,
+      "timeout": 120,
+      "rateLimitRpm": 500
+    },
+    "blockedCommands": [
+      "rm -rf", "reboot", "shutdown", "init 0", "init 6", "halt", "poweroff",
+      "mkfs", "dd if=/dev/zero", "kubectl delete namespace", "kubectl delete --all",
+      "iptables -F", "systemctl stop n8n"
+    ]
+  }
+}
