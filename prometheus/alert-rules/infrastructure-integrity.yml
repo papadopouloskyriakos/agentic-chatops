@@ -1,0 +1,109 @@
+groups:
+  - name: infrastructure-integrity
+    interval: 5m
+    rules:
+
+      - alert: ASABindingDrift
+        expr: asa_binding_drift_total > 0
+        for: 10m
+        labels:
+          severity: critical
+          service: site-to-site-vpn
+        annotations:
+          summary: "ASA config drift: {{ $value }} missing VTI access-group binding(s)"
+          description: |
+            At least one VTI interface has lost its `access-group vti_access_in`
+            binding. Without it, transit traffic on that interface is silently
+            dropped with `acl-drop` at ingress while BGP keeps working (control-
+            plane bypasses interface ACLs), so the failure is invisible to normal
+            health checks. This was the root cause of the 2026-04-21 Matrix +
+            portfolio outage.
+
+            Inspect:   python3 scripts/check-asa-binding-drift.py
+            Expected bindings per ASA are encoded in the script header.
+            Fix:       on the affected ASA, re-apply
+                       `access-group vti_access_in in interface <iface>`
+                       then `write memory`.
+
+      - alert: ASABindingDriftCheckStale
+        expr: time() - node_textfile_mtime_seconds{file="asa_binding_drift"} > 3600
+        for: 10m
+        labels:
+          severity: warning
+          service: site-to-site-vpn
+        annotations:
+          summary: "ASA drift check metric is stale (>1h since last update)"
+          description: |
+            The check-asa-binding-drift cron on app-user hasn't refreshed
+            /var/lib/node_exporter/textfile_collector/asa_binding_drift.prom
+            in over an hour. Check: tail /tmp/asa-drift.log on nl-claude01.
+
+      - alert: ASAShunInstalled
+        expr: asa_shun_count > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: threat-detection
+        annotations:
+          summary: "ASA shun installed on {{ $labels.device }} ({{ $value }} IP(s))"
+          description: |
+            The threat-detection scanning-threat guard installed a shun on
+            {{ $labels.device }}. If the shunned IP is a trusted infrastructure
+            address (router, VTI endpoint, VPS loopback, K8s pod), this is a
+            false-positive caused by a transient traffic burst hitting the
+            per-host burst threshold (100 pps burst / 50 pps sustained since
+            2026-04-22 — see memory feedback_asa_shun_vti.md).
+
+            Inspect:   ssh operator@<asa-ip> 'show shun; show shun statistics'
+            If trusted: 1) `clear shun <ip>`, 2) add the subnet to the
+                       appropriate sub-group of whitelist_shun_nlgr_all_subnets,
+                       3) write memory.
+            If not trusted: leave in place; CrowdSec + scanner baseline will
+                       correlate for a full attack picture.
+
+      - alert: ASAShunMetricStale
+        expr: time() - node_textfile_mtime_seconds{file="asa_shun"} > 1800
+        for: 10m
+        labels:
+          severity: warning
+          service: threat-detection
+        annotations:
+          summary: "ASA shun metric is stale (>30min since last update)"
+          description: |
+            The write-asa-shun-metrics cron on app-user hasn't refreshed
+            /var/lib/node_exporter/textfile_collector/asa_shun.prom in over
+            30 min. Check: tail ~/logs/claude-gateway/asa-shun-metrics.log
+            on nl-claude01.
+
+      - alert: BudgetBandwidthSaturated
+        expr: budget_dialer_utilization_input > 0.8 or budget_dialer_utilization_output > 0.8
+        for: 15m
+        labels:
+          severity: warning
+          service: budget-isp
+        annotations:
+          summary: "Budget ISP >80% utilized on {{ $labels.instance }} for 15m+"
+          description: |
+            Sustained Budget-PPPoE utilization above 80% of the configured
+            cap ({{ $value | printf "%.0f%%" }}). During Freedom-down
+            failover this is the expected direction; alert exists to page
+            the operator when tenants start visibly degrading.
+
+            Inspect:   python3 scripts/write-budget-bandwidth-metrics.py
+            Mitigate:  defer heavy pulls (backups, image sync, OS updates)
+                       until Freedom comes back up. Tenant DL policer on
+                       rtr01 Dialer1 (15 Mbps/room) protects per-user QoE.
+
+      - alert: BudgetBandwidthMetricStale
+        expr: time() - node_textfile_mtime_seconds{file="budget_bandwidth"} > 900
+        for: 10m
+        labels:
+          severity: warning
+          service: budget-isp
+        annotations:
+          summary: "Budget bandwidth metric is stale (>15min since last update)"
+          description: |
+            The write-budget-bandwidth-metrics cron on app-user hasn't
+            refreshed /var/lib/node_exporter/textfile_collector/
+            budget_bandwidth.prom in over 15 min. Check:
+            tail ~/logs/claude-gateway/budget-bandwidth-metrics.log.

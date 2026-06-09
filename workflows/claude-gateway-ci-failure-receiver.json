@@ -1,0 +1,665 @@
+{
+  "updatedAt": "2026-03-25T00:56:51.611Z",
+  "createdAt": "2026-03-25T00:56:38.863Z",
+  "id": "EssVaWbHEEwVXEdy",
+  "name": "NL - CI Failure Receiver",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "GitLab CI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "gitlab-ci-failure",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "gitlab-ci-failure"
+    },
+    {
+      "id": "respond-ok",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      }
+    },
+    {
+      "id": "parse-event",
+      "name": "Parse Pipeline Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body = $('GitLab CI Webhook').first().json.body || $('GitLab CI Webhook').first().json;\n\n// Handle both pipeline and job events\nconst attrs = body.object_attributes || {};\nconst project = body.project || {};\nconst status = attrs.status || '';\nconst projectName = project.name || '';\nconst projectUrl = project.web_url || '';\nconst ref = attrs.ref || body.ref || '';\nconst pipelineId = attrs.id || body.object_attributes?.pipeline_id || '';\nconst pipelineUrl = `${projectUrl}/-/pipelines/${pipelineId}`;\n\n// Extract failed jobs from builds array\nconst builds = body.builds || [];\nconst failedJobs = builds.filter(b => b.status === 'failed').map(b => ({\n  name: b.name || b.stage || 'unknown',\n  stage: b.stage || '',\n  failureReason: b.failure_reason || '',\n  url: `${projectUrl}/-/jobs/${b.id}`\n}));\n\n// Determine project prefix from project name\nlet prefix = 'UNKNOWN';\nconst nameLower = projectName.toLowerCase();\nif (nameLower.includes('cubeos') || nameLower.includes('cube')) prefix = 'CUBEOS';\nelse if (nameLower.includes('meshsat') || nameLower.includes('mesh')) prefix = 'MESHSAT';\n\n// Extract issue ID from branch name (e.g., feature/CUBEOS-72-fix-thing)\nlet issueId = '';\nconst branchMatch = ref.match(/(CUBEOS|MESHSAT)-\\d+/i);\nif (branchMatch) issueId = branchMatch[0].toUpperCase();\n\nreturn [{ json: {\n  status,\n  projectName,\n  projectUrl,\n  ref,\n  pipelineId,\n  pipelineUrl,\n  failedJobs,\n  failedJobNames: failedJobs.map(j => j.name).join(', ') || 'unknown',\n  prefix,\n  issueId,\n  isFailed: status === 'failed'\n}}];"
+      }
+    },
+    {
+      "id": "is-failed",
+      "name": "Is Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.isFailed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "derive-room",
+      "name": "Derive Matrix Room",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const prefix = $('Parse Pipeline Event').first().json.prefix;\n\nconst ROOM_MAP = {\n  'CUBEOS': '!iXTnQsFJahUquYPDdG:matrix.example.net',\n  'MESHSAT': '!miZJJDwFQZDkuMcBqL:matrix.example.net'\n};\n\nconst targetRoom = ROOM_MAP[prefix] || '!PVkZvHgyrtBVEbgpRt:matrix.example.net';\n\nreturn [{ json: { targetRoom, prefix } }];"
+      }
+    },
+    {
+      "id": "format-message",
+      "name": "Format CI Failure Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const d = $('Parse Pipeline Event').first().json;\n\nlet msg = `\\u26d4 [CI] FAILED: ${d.projectName}/${d.ref}\\n`;\nmsg += `Pipeline: #${d.pipelineId}\\n`;\nmsg += `Failed job(s): ${d.failedJobNames}\\n`;\nif (d.failedJobs && d.failedJobs.length > 0) {\n  for (const job of d.failedJobs) {\n    msg += `  - ${job.name} (${job.stage}): ${job.failureReason || 'check logs'}\\n`;\n    msg += `    ${job.url}\\n`;\n  }\n}\nmsg += `Pipeline: ${d.pipelineUrl}`;\nif (d.issueId) msg += `\\nLinked issue: ${d.issueId}`;\n\nconst targetRoom = $('Derive Matrix Room').first().json.targetRoom;\nconst matrixBody = JSON.stringify({\n  msgtype: 'm.notice',\n  body: msg\n});\n\nreturn [{ json: { matrixBody, targetRoom, issueId: d.issueId, msg } }];"
+      }
+    },
+    {
+      "id": "post-matrix",
+      "name": "Post to Matrix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -100
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ encodeURIComponent($json.targetRoom) }}/send/m.room.message/{{ $runIndex }}-ci-{{ Date.now() }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer syt_Y2xhdWRl_vXmhFYXUnSMnkPaFfbKK_2x6u6V"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.matrixBody }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_MATRIX_CRED",
+          "name": "Matrix Claude Bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "has-issue",
+      "name": "Has Linked Issue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $('Format CI Failure Message').first().json.issueId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "post-yt-comment",
+      "name": "Post YT Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://youtrack.example.net/api/issues/{{ $('Format CI Failure Message').first().json.issueId }}/comments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED_YT_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '\\u26d4 CI pipeline failed on branch ' + $('Parse Pipeline Event').first().json.ref + '. Failed jobs: ' + $('Parse Pipeline Event').first().json.failedJobNames + '. ' + $('Parse Pipeline Event').first().json.pipelineUrl }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REDACTED_YT_CRED",
+          "name": "YouTrack API Token"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "GitLab CI Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Parse Pipeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Pipeline Event": {
+      "main": [
+        [
+          {
+            "node": "Is Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Failed?": {
+      "main": [
+        [
+          {
+            "node": "Derive Matrix Room",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Derive Matrix Room": {
+      "main": [
+        [
+          {
+            "node": "Format CI Failure Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format CI Failure Message": {
+      "main": [
+        [
+          {
+            "node": "Post to Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Matrix": {
+      "main": [
+        [
+          {
+            "node": "Has Linked Issue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Linked Issue?": {
+      "main": [
+        [
+          {
+            "node": "Post YT Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "42d49ca9-fdd0-4b2a-ad78-db20a74c897e",
+  "activeVersionId": "42d49ca9-fdd0-4b2a-ad78-db20a74c897e",
+  "versionCounter": 4,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-25T00:56:38.868Z",
+      "createdAt": "2026-03-25T00:56:38.868Z",
+      "role": "workflow:owner",
+      "workflowId": "EssVaWbHEEwVXEdy",
+      "projectId": "CLDM2Ezgw9101HuF",
+      "project": {
+        "updatedAt": "2025-01-28T17:38:17.181Z",
+        "createdAt": "2025-01-28T17:31:03.531Z",
+        "id": "CLDM2Ezgw9101HuF",
+        "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-03-25T00:56:38.876Z",
+    "createdAt": "2026-03-25T00:56:38.876Z",
+    "versionId": "42d49ca9-fdd0-4b2a-ad78-db20a74c897e",
+    "workflowId": "EssVaWbHEEwVXEdy",
+    "nodes": [
+      {
+        "id": "webhook",
+        "name": "GitLab CI Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "path": "gitlab-ci-failure",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "webhookId": "gitlab-ci-failure"
+      },
+      {
+        "id": "respond-ok",
+        "name": "Respond 200",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "OK"
+        }
+      },
+      {
+        "id": "parse-event",
+        "name": "Parse Pipeline Event",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const body = $('GitLab CI Webhook').first().json.body || $('GitLab CI Webhook').first().json;\n\n// Handle both pipeline and job events\nconst attrs = body.object_attributes || {};\nconst project = body.project || {};\nconst status = attrs.status || '';\nconst projectName = project.name || '';\nconst projectUrl = project.web_url || '';\nconst ref = attrs.ref || body.ref || '';\nconst pipelineId = attrs.id || body.object_attributes?.pipeline_id || '';\nconst pipelineUrl = `${projectUrl}/-/pipelines/${pipelineId}`;\n\n// Extract failed jobs from builds array\nconst builds = body.builds || [];\nconst failedJobs = builds.filter(b => b.status === 'failed').map(b => ({\n  name: b.name || b.stage || 'unknown',\n  stage: b.stage || '',\n  failureReason: b.failure_reason || '',\n  url: `${projectUrl}/-/jobs/${b.id}`\n}));\n\n// Determine project prefix from project name\nlet prefix = 'UNKNOWN';\nconst nameLower = projectName.toLowerCase();\nif (nameLower.includes('cubeos') || nameLower.includes('cube')) prefix = 'CUBEOS';\nelse if (nameLower.includes('meshsat') || nameLower.includes('mesh')) prefix = 'MESHSAT';\n\n// Extract issue ID from branch name (e.g., feature/CUBEOS-72-fix-thing)\nlet issueId = '';\nconst branchMatch = ref.match(/(CUBEOS|MESHSAT)-\\d+/i);\nif (branchMatch) issueId = branchMatch[0].toUpperCase();\n\nreturn [{ json: {\n  status,\n  projectName,\n  projectUrl,\n  ref,\n  pipelineId,\n  pipelineUrl,\n  failedJobs,\n  failedJobNames: failedJobs.map(j => j.name).join(', ') || 'unknown',\n  prefix,\n  issueId,\n  isFailed: status === 'failed'\n}}];"
+        }
+      },
+      {
+        "id": "is-failed",
+        "name": "Is Failed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond1",
+                "leftValue": "={{ $json.isFailed }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "derive-room",
+        "name": "Derive Matrix Room",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const prefix = $('Parse Pipeline Event').first().json.prefix;\n\nconst ROOM_MAP = {\n  'CUBEOS': '!iXTnQsFJahUquYPDdG:matrix.example.net',\n  'MESHSAT': '!miZJJDwFQZDkuMcBqL:matrix.example.net'\n};\n\nconst targetRoom = ROOM_MAP[prefix] || '!PVkZvHgyrtBVEbgpRt:matrix.example.net';\n\nreturn [{ json: { targetRoom, prefix } }];"
+        }
+      },
+      {
+        "id": "format-message",
+        "name": "Format CI Failure Message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const d = $('Parse Pipeline Event').first().json;\n\nlet msg = `\\u26d4 [CI] FAILED: ${d.projectName}/${d.ref}\\n`;\nmsg += `Pipeline: #${d.pipelineId}\\n`;\nmsg += `Failed job(s): ${d.failedJobNames}\\n`;\nif (d.failedJobs && d.failedJobs.length > 0) {\n  for (const job of d.failedJobs) {\n    msg += `  - ${job.name} (${job.stage}): ${job.failureReason || 'check logs'}\\n`;\n    msg += `    ${job.url}\\n`;\n  }\n}\nmsg += `Pipeline: ${d.pipelineUrl}`;\nif (d.issueId) msg += `\\nLinked issue: ${d.issueId}`;\n\nconst targetRoom = $('Derive Matrix Room').first().json.targetRoom;\nconst matrixBody = JSON.stringify({\n  msgtype: 'm.notice',\n  body: msg\n});\n\nreturn [{ json: { matrixBody, targetRoom, issueId: d.issueId, msg } }];"
+        }
+      },
+      {
+        "id": "post-matrix",
+        "name": "Post to Matrix",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          -100
+        ],
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://matrix.example.net/_matrix/client/v3/rooms/{{ encodeURIComponent($json.targetRoom) }}/send/m.room.message/{{ $runIndex }}-ci-{{ Date.now() }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer syt_Y2xhdWRl_vXmhFYXUnSMnkPaFfbKK_2x6u6V"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.matrixBody }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_MATRIX_CRED",
+            "name": "Matrix Claude Bot"
+          }
+        },
+        "continueOnFail": true
+      },
+      {
+        "id": "has-issue",
+        "name": "Has Linked Issue?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1540,
+          -100
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cond2",
+                "leftValue": "={{ $('Format CI Failure Message').first().json.issueId }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "post-yt-comment",
+        "name": "Post YT Comment",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1760,
+          -200
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "=https://youtrack.example.net/api/issues/{{ $('Format CI Failure Message').first().json.issueId }}/comments",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer REDACTED_YT_TOKEN"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: '\\u26d4 CI pipeline failed on branch ' + $('Parse Pipeline Event').first().json.ref + '. Failed jobs: ' + $('Parse Pipeline Event').first().json.failedJobNames + '. ' + $('Parse Pipeline Event').first().json.pipelineUrl }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REDACTED_YT_CRED",
+            "name": "YouTrack API Token"
+          }
+        },
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "GitLab CI Webhook": {
+        "main": [
+          [
+            {
+              "node": "Respond 200",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond 200": {
+        "main": [
+          [
+            {
+              "node": "Parse Pipeline Event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Pipeline Event": {
+        "main": [
+          [
+            {
+              "node": "Is Failed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Failed?": {
+        "main": [
+          [
+            {
+              "node": "Derive Matrix Room",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Derive Matrix Room": {
+        "main": [
+          [
+            {
+              "node": "Format CI Failure Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format CI Failure Message": {
+        "main": [
+          [
+            {
+              "node": "Post to Matrix",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post to Matrix": {
+        "main": [
+          [
+            {
+              "node": "Has Linked Issue?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Linked Issue?": {
+        "main": [
+          [
+            {
+              "node": "Post YT Comment",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "authors": "Redrick Schuhart",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-03-25T00:56:51.800Z",
+        "id": 874,
+        "workflowId": "EssVaWbHEEwVXEdy",
+        "versionId": "42d49ca9-fdd0-4b2a-ad78-db20a74c897e",
+        "event": "activated",
+        "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+      }
+    ]
+  }
+}

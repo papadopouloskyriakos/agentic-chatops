@@ -1,0 +1,230 @@
+groups:
+  - name: rag-pipeline-health
+    interval: 1m
+    rules:
+
+      - alert: RAGRerankServiceDown
+        expr: kb_rerank_service_up == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: rag-rerank
+        annotations:
+          summary: "bge-reranker-v2-m3 service at nl-gpu01:11436 has been down >=5m"
+          description: |
+            Retrieval still functions via Ollama yes/no fallback (auto-triggers) but
+            quality degrades ~15 points on the hard eval. Runbook: docs/runbooks/rerank-service.md
+          impact: "RAG hit@5 degrades ~15 points but pipeline functional. No alerts missed."
+
+      - alert: RAGLatencyP95High
+        # IFRNLLEI01PRD-703: target the `real` cohort only. The union
+        # kb_retrieval_latency_seconds{quantile="0.95"} was confounded by
+        # two synthetic-novel probe queries that deliberately have no corpus
+        # match — they always force rewrite + rerank + synth (~15-20s) and
+        # were driving false positives that didn't reflect production RAG
+        # latency. The `novel` category series is still emitted for
+        # Grafana-side corpus-coverage monitoring but is NOT alerted on.
+        expr: kb_retrieval_latency_seconds{category="real",quantile="0.95"} > 12.0
+        for: 15m
+        labels:
+          severity: warning
+          service: rag-retrieval
+        annotations:
+          summary: "RAG retrieval p95 latency (real queries) > 12s (current: {{ $value }}s)"
+          description: |
+            Baseline p95 for real queries is ~4-8s (matches expected corpus). Sustained
+            >12s suggests rerank service contention, synth API degradation, or corpus
+            growth past sweet spot.
+
+            Novel-query p95 is tracked separately as
+            kb_retrieval_latency_seconds{category="novel",quantile="0.95"} and is
+            expected to be 15-20s — that series is informational, not alerted.
+
+            SEARCH_BUDGET_S env (default 10s in kb-semantic-search.py) guards the
+            HyDE + synth fallback paths. Lower to 6-8s if contention persists.
+            Baseline shifted from 5s → ~9s on 2026-04-18 after the L02 Haiku
+            synth swap (quality +2.7 pts traded for slightly higher p95).
+
+      - alert: RAGMigrationTriggered
+        expr: kb_migration_trigger_distance >= 1.0
+        for: 30m
+        labels:
+          severity: info
+          service: rag-retrieval
+        annotations:
+          summary: "RAG migration trigger fired — FAISS cutover advisable"
+          description: |
+            Either embedded vectors > 25k OR p95 > 5s for 30m sustained.
+            FAISS index already synced by */15 cron — safe to switch reads.
+
+      - alert: RAGQwenJsonSilentFailure
+        expr: increase(kb_qwen_json_failure_total[10m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: rag-synthesis
+        annotations:
+          summary: "qwen_json failing >10 times / 10min (KG traverse + synthesis affected)"
+          description: |
+            _qwen_json fallback ladder (qwen2.5:7b → qwen3:4b) is failing repeatedly.
+            KG traversal and RAG Fusion variant generation are degraded.
+
+      - alert: RAGEmbeddingStagnant
+        expr: |
+          (kb_embedded_rows_total offset 24h) > 0
+          and (kb_embedded_rows_total - (kb_embedded_rows_total offset 24h)) < 1
+          and (kb_embedded_rows{table="session_transcripts"} - (kb_embedded_rows{table="session_transcripts"} offset 24h)) < 1
+        for: 24h
+        labels:
+          severity: info
+          service: rag-indexing
+        annotations:
+          summary: "No new embedded rows in 24h — indexing pipeline may be stuck"
+          description: |
+            Either no new sessions ran (plausible) or archive-session-transcript writer
+            is failing to embed. Check /tmp/index-memories.log + session end workflow.
+
+      - alert: RAGHardEvalRegression
+        expr: kb_hard_eval_hit_rate < 0.70
+        for: 7d
+        labels:
+          severity: warning
+          service: rag-quality
+        annotations:
+          summary: "Hard eval judge hit@5 dropped below 0.70 (currently {{ $value }})"
+          description: |
+            Historical hit@5 is 0.75. Sustained drop indicates content-index drift,
+            model swap, or rerank degradation. Check last 3 weekly eval runs in Grafana.
+
+      - alert: KBOpenClawSyncFailing
+        expr: kb_openclaw_sync_errors > 0
+        for: 30m
+        labels:
+          severity: warning
+          service: openclaw-sync
+        annotations:
+          summary: "OpenClaw skills sync failing for >=30m (errors={{ $value }})"
+          description: |
+            `scripts/sync-openclaw-skills.sh` cannot copy the gateway source into
+            OpenClaw's skills dir. OpenClaw quality will drift behind gateway until
+            fixed. Check SSH connectivity to nl-openclaw01 and /tmp/sync-openclaw-skills.log.
+
+      - alert: KBOpenClawSyncStale
+        expr: (time() - kb_openclaw_sync_last_run_timestamp_seconds) > 172800
+        for: 1h
+        labels:
+          severity: warning
+          service: openclaw-sync
+        annotations:
+          summary: "OpenClaw skills sync cron hasn't fired in >48h"
+          description: |
+            `sync-openclaw-skills.sh` cron (daily 04:12 UTC) last ran {{ $value }}s ago.
+            Crontab may have been rewritten. Check `crontab -l | grep sync-openclaw`
+            on nl-claude01.
+
+      - alert: KBContentRefreshStale
+        expr: kb_content_refresh_age_seconds > 172800
+        for: 1h
+        labels:
+          severity: warning
+          service: rag-content-refresh
+        annotations:
+          summary: "Auto-refreshed doc '{{ $labels.doc }}' is >48h old"
+          description: |
+            One of the 5 daily auto-refresh scripts (refresh-rag-architecture,
+            refresh-rag-metrics-reference, refresh-network-addresses,
+            refresh-host-blast-radius, format-crontab-reference) has not
+            regenerated its output in over 48h. Check /tmp/refresh-*.log for
+            errors and verify the cron is installed (daily 04:00-04:20 UTC).
+
+      - alert: KBWeeklyEvalStale
+        expr: (time() - kb_hard_eval_last_run_timestamp_seconds) > 691200
+        for: 1h
+        labels:
+          severity: warning
+          service: rag-quality
+        annotations:
+          summary: "Weekly hard-eval cron hasn't fired in >8 days"
+          description: |
+            `weekly-eval-cron.sh` (Monday 05:00 UTC) last ran {{ $value }}s ago.
+            Expected cadence is 7 days. Quality regressions will not be visible
+            in the dashboard until eval resumes. Check `/tmp/weekly-eval.log`
+            and crontab.
+
+      - alert: KBWeeklyEvalMetricAbsent
+        expr: absent(kb_hard_eval_last_run_timestamp_seconds)
+        for: 2h
+        labels:
+          severity: warning
+          service: rag-quality
+        annotations:
+          summary: "Weekly hard-eval metric is ABSENT from Prometheus"
+          description: |
+            `kb_hard_eval_last_run_timestamp_seconds` has no samples. Without
+            this metric `KBWeeklyEvalStale` evaluates to empty vector (silently
+            inactive), so a broken cron produces no pager. Causes: cron aborted
+            before metric emit, textfile collector file removed or unreadable
+            (e.g. mode 0600 vs node-exporter running as nobody), or
+            weekly-eval-cron.sh exited early. Filed after
+            IFRNLLEI01PRD-614 caught this live.
+
+      - alert: KBContentRefreshMetricAbsent
+        expr: absent(kb_content_refresh_age_seconds)
+        for: 2h
+        labels:
+          severity: warning
+          service: rag-content-refresh
+        annotations:
+          summary: "kb_content_refresh_age_seconds is ABSENT from Prometheus"
+          description: |
+            `kb_content_refresh_age_seconds` has no samples. KBContentRefreshStale
+            can't fire when the metric is missing, so a silently-broken
+            auto-refresh pipeline produces no pager. Check the 5 daily refresh
+            crons at 04:00-04:20 UTC and the textfile emitter.
+
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 2
+        for: 10m
+        labels:
+          severity: warning
+          service: resilience
+        annotations:
+          summary: "Circuit breaker '{{ $labels.name }}' has been OPEN >=10m"
+          description: |
+            A named external-API circuit breaker has been in the OPEN state
+            for at least 10 minutes — meaning the wrapped upstream returned
+            `failure_threshold` consecutive failures and every half-open probe
+            since has also failed. Calls are being short-circuited to the
+            fallback path.
+            Runbook: inspect the upstream directly and use
+              `cd scripts && python3 -m lib.circuit_breaker list`
+            to see breaker state. Manual reset:
+              `python3 -m lib.circuit_breaker reset {{ $labels.name }}`.
+
+      - alert: CircuitBreakerMetricAbsent
+        expr: absent(circuit_breaker_state)
+        for: 2h
+        labels:
+          severity: warning
+          service: resilience
+        annotations:
+          summary: "circuit_breaker_state is ABSENT from Prometheus"
+          description: |
+            `circuit_breaker_state` has no samples. Either no breaker has
+            been registered yet (new install) or write-circuit-breaker-metrics.sh
+            cron isn't firing. Check `*/5 * * * * write-circuit-breaker-metrics.sh`
+            in crontab.
+
+      - alert: KBOpenClawSyncMetricAbsent
+        expr: absent(kb_openclaw_sync_last_run_timestamp_seconds)
+        for: 2h
+        labels:
+          severity: warning
+          service: openclaw-sync
+        annotations:
+          summary: "kb_openclaw_sync_last_run_timestamp_seconds is ABSENT from Prometheus"
+          description: |
+            `kb_openclaw_sync_last_run_timestamp_seconds` has no samples.
+            KBOpenClawSyncStale can't fire when the metric is missing, so a
+            silently-broken sync cron produces no pager. Check the daily 04:12
+            UTC cron and `sync-openclaw-skills.sh` textfile emit at the end.

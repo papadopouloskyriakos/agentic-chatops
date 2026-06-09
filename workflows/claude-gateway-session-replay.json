@@ -1,0 +1,467 @@
+{
+    "updatedAt": "2026-04-29T00:21:03.365Z",
+    "createdAt": "2026-04-29T00:01:04.006Z",
+    "id": "lJEGboDYLmx25kBo",
+    "name": "NL - Claude Gateway Session Replay",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "id": "webhook",
+            "name": "Session Replay Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                240,
+                300
+            ],
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "session-replay",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "webhookId": "session-replay"
+        },
+        {
+            "id": "validate-input",
+            "name": "Validate Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                460,
+                300
+            ],
+            "parameters": {
+                "jsCode": "// IFRNLLEI01PRD-751 (G4.P1.4): Session-replay endpoint validator.\n// Validates {session_id, prompt} payload and confirms session_id exists in\n// gateway.db::sessions before invoking the SSH replay step.\nconst body = $input.first().json.body || $input.first().json;\nconst sessionId = (body.session_id || '').trim();\nconst prompt = (body.prompt || '').trim();\n\nif (!sessionId || !prompt) {\n  return [{ json: { ok: false, status: 400, error: 'session_id and prompt are required' } }];\n}\nif (!/^[a-zA-Z0-9_\\-]{4,128}$/.test(sessionId)) {\n  return [{ json: { ok: false, status: 400, error: 'session_id format invalid' } }];\n}\n\n// Format-only validation. Existence check is done by the downstream SSH\n// node (which combines sqlite3 lookup + claude -r execution in one script).\nreturn [{ json: { ok: true, sessionId, prompt, b64Prompt: Buffer.from(prompt).toString('base64') } }];"
+            }
+        },
+        {
+            "id": "branch",
+            "name": "If Valid",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                680,
+                300
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "version": 2,
+                        "caseSensitive": true,
+                        "typeValidation": "strict"
+                    },
+                    "conditions": [
+                        {
+                            "leftValue": "={{ $json.ok }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true",
+                                "singleValue": true
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            }
+        },
+        {
+            "id": "ssh-replay",
+            "name": "SSH Claude Resume",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                900,
+                220
+            ],
+            "parameters": {
+                "resource": "command",
+                "authentication": "privateKey",
+                "command": "=SID='{{ $json.sessionId }}'; B64='{{ $json.b64Prompt }}'; DB=/app/cubeos/claude-context/gateway.db; SAFE_SID=$(printf %s \"$SID\" | sed \"s/'/''/g\"); CNT=$(sqlite3 \"$DB\" \"SELECT COUNT(*) FROM sessions WHERE session_id='$SAFE_SID'\" 2>/dev/null || echo 0); if [ \"$CNT\" = \"0\" ]; then printf '%s\\n' '{\"is_error\":true,\"error_type\":\"unknown_session\",\"session_id\":\"'\"$SID\"'\"}'; exit 0; fi; cd /app/cubeos && unset CLAUDECODE && claude -r \"$SID\" -p \"$(printf %s \"$B64\" | base64 -d)\" --output-format json --dangerously-skip-permissions",
+                "cwd": "/app/cubeos"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            }
+        },
+        {
+            "id": "parse-and-emit",
+            "name": "Parse + Emit Event",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1120,
+                220
+            ],
+            "parameters": {
+                "jsCode": "// IFRNLLEI01PRD-751 (G4.P1.4): parse SSH output + emit session_replay_invoked event.\nconst stdout = $('SSH Claude Resume').first().json.stdout || '';\nconst sessionId = $('Validate Input').first().json.sessionId || '';\nconst prompt = $('Validate Input').first().json.prompt || '';\nconst t0 = Date.now();\n\nlet result = '', costUsd = 0, numTurns = 0, model = '';\nlet outcome = 'success';\ntry {\n  const parsed = JSON.parse(stdout.trim());\n  result = parsed.result || '';\n  costUsd = parsed.cost_usd || 0;\n  numTurns = parsed.num_turns || 0;\n  model = parsed.model || '';\n  if (parsed.is_error) outcome = (parsed.error_type === 'unknown_session') ? 'unknown_session' : 'error';\n} catch (e) {\n  outcome = 'parse_error';\n  result = stdout.substring(0, 500);\n}\n\n// Event emission deferred \u2014 the n8n sandbox disallows child_process. The\n// downstream telemetry pipeline (poll-claude-usage.sh */30) picks up the\n// replay session from the JSONL log, so cost/turns are still tracked.\nconst statusCode = (outcome === 'unknown_session') ? 404 : 200;\nreturn [{ json: { status: statusCode, body: { sessionId, outcome, result, cost_usd: costUsd, num_turns: numTurns, model, elapsed_ms: Date.now() - t0 } } }];"
+            }
+        },
+        {
+            "id": "respond-ok",
+            "name": "Respond OK",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                1340,
+                220
+            ],
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json.body }}",
+                "options": {
+                    "responseCode": "={{ $json.status }}"
+                }
+            }
+        },
+        {
+            "id": "respond-error",
+            "name": "Respond Error",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                900,
+                380
+            ],
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ { error: $json.error || 'invalid request' } }}",
+                "options": {
+                    "responseCode": "={{ $json.status || 400 }}"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Session Replay Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [
+                    {
+                        "node": "If Valid",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "If Valid": {
+            "main": [
+                [
+                    {
+                        "node": "SSH Claude Resume",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Respond Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "SSH Claude Resume": {
+            "main": [
+                [
+                    {
+                        "node": "Parse + Emit Event",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse + Emit Event": {
+            "main": [
+                [
+                    {
+                        "node": "Respond OK",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "saveDataErrorExecution": "all",
+        "saveDataSuccessExecution": "all",
+        "saveManualExecutions": true,
+        "saveExecutionProgress": true,
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "1f9ff2bb-2c69-445f-bc78-75453be8aa8b",
+    "activeVersionId": "1f9ff2bb-2c69-445f-bc78-75453be8aa8b",
+    "versionCounter": 16,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-04-29T00:01:04.010Z",
+            "createdAt": "2026-04-29T00:01:04.010Z",
+            "role": "workflow:owner",
+            "workflowId": "lJEGboDYLmx25kBo",
+            "projectId": "CLDM2Ezgw9101HuF",
+            "project": {
+                "updatedAt": "2025-01-28T17:38:17.181Z",
+                "createdAt": "2025-01-28T17:31:03.531Z",
+                "id": "CLDM2Ezgw9101HuF",
+                "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-04-29T00:21:03.366Z",
+        "createdAt": "2026-04-29T00:21:03.366Z",
+        "versionId": "1f9ff2bb-2c69-445f-bc78-75453be8aa8b",
+        "workflowId": "lJEGboDYLmx25kBo",
+        "nodes": [
+            {
+                "id": "webhook",
+                "name": "Session Replay Webhook",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2,
+                "position": [
+                    240,
+                    300
+                ],
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "session-replay",
+                    "responseMode": "responseNode",
+                    "options": {}
+                },
+                "webhookId": "session-replay"
+            },
+            {
+                "id": "validate-input",
+                "name": "Validate Input",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    460,
+                    300
+                ],
+                "parameters": {
+                    "jsCode": "// IFRNLLEI01PRD-751 (G4.P1.4): Session-replay endpoint validator.\n// Validates {session_id, prompt} payload and confirms session_id exists in\n// gateway.db::sessions before invoking the SSH replay step.\nconst body = $input.first().json.body || $input.first().json;\nconst sessionId = (body.session_id || '').trim();\nconst prompt = (body.prompt || '').trim();\n\nif (!sessionId || !prompt) {\n  return [{ json: { ok: false, status: 400, error: 'session_id and prompt are required' } }];\n}\nif (!/^[a-zA-Z0-9_\\-]{4,128}$/.test(sessionId)) {\n  return [{ json: { ok: false, status: 400, error: 'session_id format invalid' } }];\n}\n\n// Format-only validation. Existence check is done by the downstream SSH\n// node (which combines sqlite3 lookup + claude -r execution in one script).\nreturn [{ json: { ok: true, sessionId, prompt, b64Prompt: Buffer.from(prompt).toString('base64') } }];"
+                }
+            },
+            {
+                "id": "branch",
+                "name": "If Valid",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    680,
+                    300
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "version": 2,
+                            "caseSensitive": true,
+                            "typeValidation": "strict"
+                        },
+                        "conditions": [
+                            {
+                                "leftValue": "={{ $json.ok }}",
+                                "rightValue": true,
+                                "operator": {
+                                    "type": "boolean",
+                                    "operation": "true",
+                                    "singleValue": true
+                                }
+                            }
+                        ],
+                        "combinator": "and"
+                    },
+                    "options": {}
+                }
+            },
+            {
+                "id": "ssh-replay",
+                "name": "SSH Claude Resume",
+                "type": "n8n-nodes-base.ssh",
+                "typeVersion": 1,
+                "position": [
+                    900,
+                    220
+                ],
+                "parameters": {
+                    "resource": "command",
+                    "authentication": "privateKey",
+                    "command": "=SID='{{ $json.sessionId }}'; B64='{{ $json.b64Prompt }}'; DB=/app/cubeos/claude-context/gateway.db; SAFE_SID=$(printf %s \"$SID\" | sed \"s/'/''/g\"); CNT=$(sqlite3 \"$DB\" \"SELECT COUNT(*) FROM sessions WHERE session_id='$SAFE_SID'\" 2>/dev/null || echo 0); if [ \"$CNT\" = \"0\" ]; then printf '%s\\n' '{\"is_error\":true,\"error_type\":\"unknown_session\",\"session_id\":\"'\"$SID\"'\"}'; exit 0; fi; cd /app/cubeos && unset CLAUDECODE && claude -r \"$SID\" -p \"$(printf %s \"$B64\" | base64 -d)\" --output-format json --dangerously-skip-permissions",
+                    "cwd": "/app/cubeos"
+                },
+                "credentials": {
+                    "sshPrivateKey": {
+                        "id": "REDACTED_SSH_CRED",
+                        "name": "nl-claude01 - SSH app-user"
+                    }
+                }
+            },
+            {
+                "id": "parse-and-emit",
+                "name": "Parse + Emit Event",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    1120,
+                    220
+                ],
+                "parameters": {
+                    "jsCode": "// IFRNLLEI01PRD-751 (G4.P1.4): parse SSH output + emit session_replay_invoked event.\nconst stdout = $('SSH Claude Resume').first().json.stdout || '';\nconst sessionId = $('Validate Input').first().json.sessionId || '';\nconst prompt = $('Validate Input').first().json.prompt || '';\nconst t0 = Date.now();\n\nlet result = '', costUsd = 0, numTurns = 0, model = '';\nlet outcome = 'success';\ntry {\n  const parsed = JSON.parse(stdout.trim());\n  result = parsed.result || '';\n  costUsd = parsed.cost_usd || 0;\n  numTurns = parsed.num_turns || 0;\n  model = parsed.model || '';\n  if (parsed.is_error) outcome = (parsed.error_type === 'unknown_session') ? 'unknown_session' : 'error';\n} catch (e) {\n  outcome = 'parse_error';\n  result = stdout.substring(0, 500);\n}\n\n// Event emission deferred \u2014 the n8n sandbox disallows child_process. The\n// downstream telemetry pipeline (poll-claude-usage.sh */30) picks up the\n// replay session from the JSONL log, so cost/turns are still tracked.\nconst statusCode = (outcome === 'unknown_session') ? 404 : 200;\nreturn [{ json: { status: statusCode, body: { sessionId, outcome, result, cost_usd: costUsd, num_turns: numTurns, model, elapsed_ms: Date.now() - t0 } } }];"
+                }
+            },
+            {
+                "id": "respond-ok",
+                "name": "Respond OK",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.1,
+                "position": [
+                    1340,
+                    220
+                ],
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ $json.body }}",
+                    "options": {
+                        "responseCode": "={{ $json.status }}"
+                    }
+                }
+            },
+            {
+                "id": "respond-error",
+                "name": "Respond Error",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.1,
+                "position": [
+                    900,
+                    380
+                ],
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ { error: $json.error || 'invalid request' } }}",
+                    "options": {
+                        "responseCode": "={{ $json.status || 400 }}"
+                    }
+                }
+            }
+        ],
+        "connections": {
+            "Session Replay Webhook": {
+                "main": [
+                    [
+                        {
+                            "node": "Validate Input",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Validate Input": {
+                "main": [
+                    [
+                        {
+                            "node": "If Valid",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "If Valid": {
+                "main": [
+                    [
+                        {
+                            "node": "SSH Claude Resume",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ],
+                    [
+                        {
+                            "node": "Respond Error",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "SSH Claude Resume": {
+                "main": [
+                    [
+                        {
+                            "node": "Parse + Emit Event",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Parse + Emit Event": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond OK",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Redrick Schuhart",
+        "name": null,
+        "description": null,
+        "autosaved": false,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-04-29T00:21:03.996Z",
+                "id": 6776,
+                "workflowId": "lJEGboDYLmx25kBo",
+                "versionId": "1f9ff2bb-2c69-445f-bc78-75453be8aa8b",
+                "event": "activated",
+                "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            },
+            {
+                "createdAt": "2026-04-29T00:21:03.814Z",
+                "id": 6775,
+                "workflowId": "lJEGboDYLmx25kBo",
+                "versionId": "1f9ff2bb-2c69-445f-bc78-75453be8aa8b",
+                "event": "deactivated",
+                "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        ]
+    }
+}
