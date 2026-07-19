@@ -1,0 +1,43 @@
+{
+  "tasks": [
+    {
+      "task_id": "AR-1",
+      "title": "Reconcile completed sessions to YT + session_log",
+      "dependencies": [],
+      "parallelizable": true,
+      "files_owned": [
+        "scripts/reconcile-completed-sessions.py"
+      ],
+      "requirement_ids": [
+        "REQ-201",
+        "REQ-202",
+        "REQ-203",
+        "REQ-204",
+        "REQ-205",
+        "REQ-206"
+      ],
+      "bounded_context": "auto-resolve",
+      "acceptance_test": "spec/003-auto-resolve/acceptance/auto-resolve.feature",
+      "risk_score": 0.55
+    },
+    {
+      "task_id": "AR-2",
+      "title": "Requeue dropped escalations (slot-locked + orphaned-poll re-check)",
+      "dependencies": [
+        "AR-1"
+      ],
+      "parallelizable": true,
+      "files_owned": [
+        "scripts/requeue-escalations.py",
+        "scripts/queue-escalation.sh"
+      ],
+      "requirement_ids": [
+        "REQ-207",
+        "REQ-208"
+      ],
+      "bounded_context": "auto-resolve",
+      "acceptance_test": "spec/003-auto-resolve/acceptance/auto-resolve.feature",
+      "risk_score": 0.5
+    }
+  ]
+}

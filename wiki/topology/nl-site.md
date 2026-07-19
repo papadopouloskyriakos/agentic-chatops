@@ -1,0 +1,197 @@
+# NL (Leiden) Site Topology
+
+> Compiled from 24 CLAUDE.md files + 21 memory files. 2026-07-03 04:30 UTC.
+
+## CLAUDE.md Files
+
+### CLAUDE.md
+
+# Example Corp Infrastructure — Claude Code Instructions
+## Repository Purpose
+Single source of truth for the Example Corp homelab infrastructure across 4 countries (NL, GR, CH, NO). Everything is deployed via GitLab CI/CD pipelines — never make changes directly on servers.
+- **GitLab instance**: `https://gitlab.example.net/` (NL site — primary GitLab instance)
+- **Repo path**: `infrastructure/nl/production`
+
+### k8s/CLAUDE.md
+
+# Kubernetes Infrastructure — Claude Code Instructions
+## Architecture
+- **Cluster**: `nlcl01k8s` (ID: 1), K8s v1.34.2, API at `api-k8s.example.net:6443`
+- **Nodes**: 3 control-plane (4 CPU, 8GB — ctrl02 4GB on pve02, ctrl01+ctrl03 upgraded 4→8GB on 2026-03-15) + 4 workers (8 CPU, 8GB), all Ubuntu 24.04, IPs 10.0.X.X-12 (CP), .20-23 (workers)
+- **CNI**: Cilium v1.18.4, eBPF, kubeProxyReplacement, VXLAN tunneling, MTU 1350
+
+### network/CLAUDE.md
+
+# Network Infrastructure — Claude Code Instructions
+## Device Inventory
+| Device | Model | OS | IP | Role | Deploy Method |
+|--------|-------|----|----|------|---------------|
+| nl-fw01 | ASA 5508-X | ASA 9.16(4) | 10.0.181.X | Core firewall, NAT, VPN, BGP | Netmiko (ASA prompts incompatible with NAPALM) |
+
+### ci/CLAUDE.md
+
+# CI/CD Pipeline — Claude Code Instructions
+## Architecture
+Main pipeline (`.gitlab-ci.yml`) defines 5 stages and includes 8 modular files:
+```
+drift-detection → validate → pre-deploy → deploy → verify
+
+### edge/CLAUDE.md
+
+# Edge Infrastructure — BGP, IPsec, DMZ & Public Services
+## Overview
+The edge layer handles all public-facing traffic for Example Corp. It forms a geographically distributed anycast network: external VPS nodes terminate BGP and TLS, then forward traffic over IPsec tunnels to DMZ Docker hosts at each site. Internal FRR route reflectors distribute routes between all participants.
+**AS Number:** AS64512
+**IPv6 prefix:** `2a0c:9a40:8e20::/48` (announced from all three VPS nodes — anycast). Per-domain anycast `/128`s carved out of the prefix: `::1` (papadopoulos.tech, matrix, mattermost), `::2`/`::3` (reserved for future papadopoulos.tech multi-homing), `::4` (mulecube), `::5` (cubeos.app), `::6` (withelli), `::7` (meshsat.net), `::8` (meshsat.org), `::9` (omoikane.coach). Next free: `::a`. When allocating a new slot, add it to all three VPS netplans (reboot to apply — never `netplan apply` on a VPS once eBGP is established; the 241k+ kernel routes from iFog blow the netlink-enumeration timeout — see txhou01vps01 onboarding 2026-05-06), add matching `bind [::N]:80` and `bind [::N]:443` lines in `frontend http_redirect` and `frontend tls_in` on all VPS's haproxy.cfg, then add the Cloudflare AAAA record for the service.
+
+### edge/openvpn/CLAUDE.md
+
+# OpenVPN Access Server — Edge Config Snapshots
+Read-only snapshots for the 6 OpenVPN-AS instances. Same model as the rest of `edge/`: **live host is the source of truth**, the git copy exists for human audit/diff and **disaster-recovery rebuild**. There is no deploy pipeline.
+For host inventory (VMIDs, IPs, ports, users), see the memory file `reference_openvpnas.md` and the OAS row in the parent `edge/CLAUDE.md` Host Inventory.
+## Scope: Level C — full DR
+The snapshot is sized for a **bare-metal rebuild**. Given a fresh OAS install at the right version on a fresh LXC (re-created from `pve/<host>/lxc/<vmid>.conf`), dropping the snapshot back into place restores the box without operator effort to re-enroll users, re-issue client certs, or reset passwords.
+
+### images/CLAUDE.md
+
+# CI Runner Images — Claude Code Instructions
+## Purpose
+Build contexts for CI runner images used by GitLab pipelines. These are **build-only** — they get pushed to the private registry, not deployed as running services. Never place these under `docker/` (that directory triggers the deployment pipeline).
+## Registry
+All images push to: `registry.example.net/infrastructure/nl/production/<name>:<tag>`
+
+### native/CLAUDE.md
+
+# Native Services — Non-Docker Installations
+Services installed directly on VMs (not containerized with Docker). This directory tracks their configuration files as **read-only snapshots** for reference, drift detection, and disaster recovery.
+## Directory Convention
+```
+native/<project>/
+
+### native/fcksns/CLAUDE.md
+
+# FCKSNS — Open-Source Speaker Fleet (openSYMF)
+Open-source conversion of IKEA SYMFONISK and Sonos speakers to Raspberry Pi-based audio players, escaping Sonos vendor lock-in while keeping original hardware (power supplies, speaker drivers, buttons, LEDs).
+## Architecture
+```
+                    +-----------------------+
+
+### native/synology/CLAUDE.md
+
+# Synology NAS Fleet — nl-nas01 / nl-nas02
+## Audit Report (2026-03-17)
+### Fleet Overview
+| Property | nl-nas01 (Primary) | nl-nas02 (Secondary) |
+|----------|------------------------|--------------------------|
+
+### native/pve/CLAUDE.md
+
+# CLAUDE.md
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Scope
+Hypervisor-level (PVE host OS) config snapshots for all 5 Proxmox nodes. Initial snapshot taken 2026-04-06.
+### Per-Host Contents
+
+### native/servarr/CLAUDE.md
+
+# SERVARR — Media Stack
+Media acquisition, management, and streaming services. Consolidated from 16 individual LXCs into a single Docker Compose stack on nlservarr01 (IFRNLLEI01PRD-202). GPU-accelerated services (Plex, Jellyfin, xxxfin, Jellyswarrm) remain on nl-gpu01.
+## Planned: K8s Migration (2026-04-06)
+**Status:** Planned — Docker Compose on servarr01 is current production.
+**Motivation:** Operational consistency — one deployment model (K8s/OpenTofu/Argo CD) instead of three. Not for resource savings (VM uses 2.5 GB actual, K8s adds per-pod overhead).
+
+### native/syncthing/CLAUDE.md
+
+# Syncthing — File Sync Mesh + Private Discovery/Relay
+Continuous file synchronisation across the operator's lab + workstation + service hosts. Each node runs a Syncthing daemon (`~/.config/syncthing/config.xml`); the mesh uses **two private discovery/relay servers** (no public discovery, no NAT-traversal).
+## Topology Overview
+```
+                 ┌─ nlstsrv01 (NL relay+discovery)─┐
+
+### native/ncha/CLAUDE.md
+
+# Nextcloud HA Cluster (NCHA) — Complete Architecture
+## Traffic Flow
+```
+INTERNET
+    │
+
+### native/smtp/CLAUDE.md
+
+# CLAUDE.md
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# SMTP Relay Chain — Native Postfix Snapshots
+Read-only config snapshots for the outbound mail relay chain (Postfix + zeyple GPG + OpenDKIM). Follows the parent `native/CLAUDE.md` convention: snapshots only, no CI/CD deploy pipeline, manual SCP-then-commit.
+## Mail Flow
+
+### native/haha/CLAUDE.md
+
+# Home Assistant HA (HAHA) — Complete Architecture
+## Overview
+Fault-tolerant smart home automation cluster. Active/standby Pacemaker cluster with STONITH fencing. All services run as Pacemaker-managed Docker containers on the active node, with automatic failover to the standby. Shares the DRBD+OCFS2+NFS storage backend with the Nextcloud cluster (nlcl01file01/nlcl01file02).
+Project page: https://kyriakos.papadopoulos.tech/projects/home-assistant-ha/
+## Traffic Flow
+
+### docker/CLAUDE.md
+
+# Docker Services — Claude Code Instructions
+## Deployment Model
+- **Path convention**: `docker/<hostname>/<service>/docker-compose.yml` → deploys to `/srv/<service>/` on `<hostname>` via rsync + SSH
+- **Pipeline**: Push to main triggers `ci/docker.yml` — rsync files, then `docker compose pull && docker compose up -d --remove-orphans`
+- **Dockerfile changes**: Trigger `docker compose build --no-cache` instead of pull
+
+### docker/nl-gpu01/ollama/CLAUDE.md
+
+# Ollama — local LLM serving + Anthropic-compat shim
+Ollama LLM server plus a small Python sidecar (`anthropic-shim`) that patches Claude Code's requests into a form Ollama's `gpt-oss:20b` chat template can handle. Primary consumer: Elli on her laptop (`fouska`, 10.0.181.X), running Claude Code against a local model for her `withelli.com` blog work.
+## Architecture
+```
+Elli's laptop (fouska)  ──►  anthropic-shim :11435  ──►  ollama :11434
+
+### docker/nlfrigate01/frigate/CLAUDE.md
+
+# Frigate NVR — Claude Code Instructions
+## Service summary
+Frigate NVR for 8 cameras (4 NL outdoors + 4 GR indoors), running on the
+`nlfrigate01` LXC. Coral USB EdgeTPU for object detection, Intel QSV
+exposed for hwaccel decode/transcode. Recordings stored on syno02 NFS;
+
+### docker/nlservarr01/servarr/pinchflat/CLAUDE.md
+
+# Pinchflat Self-Healing Infrastructure
+## Session Protocol
+**On session start**: Read `PROJECT_STATE.md` to understand current system status, recent changes, and known issues before doing any work.
+**Before session end / on user request**: Offer to update `PROJECT_STATE.md` with:
+- Any changes made during the session
+
+### docker/nl-matrix01/matrix/CLAUDE.md
+
+# CLAUDE.md — Matrix Stack (nl-matrix01)
+## Session Protocol
+**At the start of every session**, read `PROJECT_STATE.md` to understand current state.
+**At the end of every session** (or when significant changes are made), update:
+1. `PROJECT_STATE.md` — reflect current state, recent changes, open issues
+
+### docker/nlprotonmail-bridge01/protonmail-bridge/CLAUDE.md
+
+# Protonmail Bridge — Claude Code Instructions
+## Overview
+Protonmail Bridge exposes a Proton Mail account as local IMAP/SMTP, allowing standard mail clients to connect. Runs on `nlprotonmail-bridge01` (10.0.181.X), a Debian 12 LXC container (VMID 201101201, pve01).
+## Architecture
+Two Docker containers plus a native Postfix MTA:
+
+### docker/nlsearxng01/searxng/CLAUDE.md
+
+# SearXNG — Claude Code Instructions
+Federated metasearch engine on `nlsearxng01` (LXC VMID_REDACTED on nl-pve01, IP 10.0.181.X).
+Public URL: `https://searxng.example.net/` (NPM TLS termination, proxy_host 11).
+Primary consumers: **OpenWebUI** + **Perplexica** via JSON API.
+## Stack
+
+### pve/CLAUDE.md
+
+# Proxmox VE Infrastructure — Claude Code Instructions
+## Hosts
+| Host | Hardware | CPU | RAM | Storage | LXC | QEMU |
+|------|----------|-----|-----|---------|-----|------|
+| nl-pve01 | Venus Series Mini PC | i9-12900H (20T) | 96 GB | NVMe ZFS | 75 | 8 |

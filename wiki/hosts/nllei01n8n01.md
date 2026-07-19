@@ -1,0 +1,31 @@
+# nl-n8n01
+
+**Site:** NL (Leiden)
+
+## Knowledge Base References
+
+**gateway:CLAUDE.md**
+- **CORRECTED 2026-06-30:** n8n LXC (`nl-n8n01`, CT VMID_REDACTED) is on **nlpve04**, confirmed live via `pvesh get /cluster/resources` (vmid VMID_REDACTED → node nlpve04). The prior "n8n lives on nl-pve01" was stale VMID-node-digit decode drift — n8n was NOT affected by the 2026-06-30 nl-pve01 power-cycle. **What IS on nl-pve01 (and pressured):** ~40 onboot LXCs/QEMUs incl. matrix (`nl-matrix01`, CT VMID_REDACTED), NPM (`nlnpm01`), FreeIPA, Pi-hole, scanner (`nlsec01`), NetBox, HAProxy, code-server, and NFS server (`nlcl01file01`). nl-pve01 has repeatedly **wedged its pmxcfs** under load (2026-06-23/-27/-30): the signature is `load-avg very high (100+) + CPU ~idle + guest status=unknown + D-state procs wchan=filename_create on /etc/pve` = hung pmxcfs (NOT CPU/IO). Wedge AMPLIFIER found 2026-06-30: `scripts/lab-stats.py` pinned its `pvesh /cluster/resources` to pve01 with no server-side timeout → each call during a stall strands a permanent D-state orphan (D-state ignores SIGKILL) → 134 piled → pmxcfs deadlock. Fixed: lab-stats now queries a healthy node first (pve03/04/02, pve01 last) + `timeout 20 pvesh` (claude-gateway MR !130, merged). Fix WITHOUT reboot (proven 2026-06-27 pve04): `systemctl restart pve-cluster` FIRST (FUSE teardown releases D-states) THEN `reset-failed pvestatd && restart pvestatd`. **Dedicated wedge detection LIVE 2026-06-30 (IFRNLLEI01PRD-1501):** the generic `NodeSaturation` alert mis-reads the wedge as CPU, and pve01 is NOT a node_exporter/snmp Prometheus target (so the existing `PVELoadHigh`/`PVEMemoryPressure*` rules in `host-pressure-alerts.tf` are silently inert for pve01). New chain: `scripts/write-pve-wedge-metrics.sh` on nl-claude01 (Cronicle `pve-wedge-metrics` `*/2`, id `emr0p04dnkl`) SSHes pve01 and emits `pve_wedge_*` (dstate_procs / pmxcfs_probe_seconds / pmxcfs_probe_ok / guests_status_unknown / collector_up / collector_last_run); 3 alerts in `host-pressure-alerts.tf` group `pve-pmxcfs-wedge` (infra MR !354, Atlantis-applied + merged, PrometheusRule gen 2): `PVEPmxcfsWedgeForming` (warn), `PVEPmxcfsWedged` (critical/tier1 → Twilio SMS), `PVEWedgeCollectorStale` (dead-man). See [`memory/pve01_pmxcfs_wedge_lab_stats_amplifier_20260630.md`](memory/pve01_pmxcfs_wedge_lab_stats_amplifier_20260630.md) + [`memory/feedback_pve_mgmt_wedge_pmxcfs_restart.md`](memory/feedback_pve_mgmt_wedge_pmxcfs_restart.md).
+
+## Incident History
+
+| Date | Alert | Root Cause | Resolution | Confidence |
+|------|-------|------------|------------|------------|
+| 2026-04-16 | n8n SQLite mutex timeout | Same nl-pve01 memory-pressure class as IFRNLLEI01PRD-566 | Self-healed in ~90s. No intervention needed. Recurring failu | 0.9 |
+
+## Related Memory Entries
+
+- **CLI and n8n Audit 2026-03-12** (reference): Comprehensive audit of Claude Code CLI flags, n8n node patterns, and MCP tool usage against official documentation. Includes HIGH-risk bugs, correct/incorrect patterns, and action items.
+- **autoposter-silent-halt-search-widget-20260527** (project): "2026-05-27 RCA — RSS2Postiz workflow (n8n ID dCCyqbu2lrWTxAxh) stopped posting after 2026-05-17 because withelli.com added a client-side search widget whose JS-template `<img src=\"'+e.thumb+'\">` now appears before the article image; the brittle image-extractor regex returns an empty src → imageUrl=null → silently filter-zero at Filter Latest Item; no node errors so all executions still report status=success."
+- **blast-radius-control-issues-for-phase-1b-operator-playbook** (project): 2 always-on openclaw_memory blast-radius rules gated by YT control issues. Reopen the issue when the cascade pattern is observed; close when stable. Phase 1b only folds while the issue is open. Created 2026-05-12.
+- **defra01agri01 — agentic system mirror target** (project): Designated mirror target for gradual deploy of the NL agentic system (n8n + Claude Code + RAG + chaos). Access + baseline specs.
+- **feedback_never_abbreviate_hostnames** (feedback): "[P0] NEVER abbreviate or truncate a hostname — always the complete site-prefixed name (gr-pve01 not gr, nl-pve01 not pve01). Operator-anger rule, reinforced 2026-06-24."
+- **n8n SQLite mutex timeout incident 2026-04-16** (project): ~90s n8n outage at 20:12 UTC caused by nl-pve01 IO pressure starving SQLite. Self-healed. Root cause identical to 2026-04-15 nl-pve01 memory pressure class.
+- **local_n8n_db_snapshot_is_stale** (project): /tmp/n8n-db.sqlite on nl-claude01 is a stale manual snapshot, not the live DB. Use workflows/ repo exports or n8n-mcp for current state.
+- **n8n OOM outage + Restart= drop-in (2026-05-11)** (project): 4h n8n outage (06:50-10:48 UTC) — OOM-killed inside the LXC, sat dead because n8n.service had Type=simple with NO Restart= directive. Operator-reported via "both pages live stats widgets are offline". n8n LXC has migrated from nl-pve01 to nlpve04 since the 2026-04-22 Known Host Pressure note in CLAUDE.md.
+- **n8n Technical Facts and Pitfalls** (project): Key technical facts about n8n, Claude CLI, expression pitfalls, MCP update safety, webhook registration, and known bugs
+- **npm_api_access_20260623** (reference): The agentic system has STANDING API access to Nginx Proxy Manager (nlnpm01) — manage proxy hosts with scripts/npm-api.py; NEVER edit the NPM DB/conf directly (cluster DB); never ask the operator for NPM creds again
+- **pve01_pmxcfs_wedge_20260630** (project): nl-pve01 pmxcfs wedge killed matrix; lab-stats.py was the orphan amplifier; n8n is on pve04 NOT pve01.
+- **nl-pve01_rpool_suspend_heatwave_20260623** (project): 2026-06-23 nl-pve01 ZFS rpool I/O-suspended (heatwave) → froze ~40 guests incl nl-pihole01 → site-wide DNS cascade. 2026-06-24 VERIFIED: host recovered (up ~20h), rpool DEGRADED running on a SINGLE FireCuda; the twin FireCuda 530 7VS00ZJ8 (eui…0048c7) genuinely FAILED (EIO storm + absent from the PCIe bus) → pending physical reseat/replace. DISTINCT from gr-pve01 nvme2n1 (= thermal throttle, NOT failed).
+
+*Compiled: 2026-07-03 04:30 UTC*

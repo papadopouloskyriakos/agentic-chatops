@@ -1,0 +1,4 @@
+{"tasks":[
+  {"task_id":"SG-1","title":"Content-aware lockstep drift detection","dependencies":[],"parallelizable":true,"files_owned":["scripts/check-spec-code-lockstep.py"],"requirement_ids":["REQ-701","REQ-702","REQ-703"],"bounded_context":"spec-governance","acceptance_test":"spec/007-spec-governance/acceptance/drift.feature","risk_score":0.4},
+  {"task_id":"SG-2","title":"Executable BDD runner","dependencies":[],"parallelizable":true,"files_owned":["scripts/run-spec-bdd.py"],"requirement_ids":["REQ-701"],"bounded_context":"spec-governance","acceptance_test":"spec/007-spec-governance/acceptance/drift.feature","risk_score":0.35}
+]}

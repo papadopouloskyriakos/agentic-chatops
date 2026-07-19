@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "n8n-as-code-monorepo": "github:EtienneLescot/n8n-as-code"
+  }
+}

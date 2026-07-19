@@ -1,0 +1,1247 @@
+[
+  {
+    "id": "SYN-01",
+    "name": "Availability: Device Down! Due to no ICMP response. (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "netbox",
+        "ping"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "SYN-02",
+    "name": "Availability: Device Down! Due to no SNMP response. (GR)",
+    "category": "availability",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "GRSKG01PVE01",
+      "alert_rule": "Device Down! Due to no SNMP response.",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "netbox",
+        "ping"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "SYN-03",
+    "name": "Availability: Host unreachable \u2014 ping timeout after 30 (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "  nl-gpu01  ",
+      "alert_rule": "Host unreachable \u2014 ping timeout after 30s",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "netbox",
+        "ping"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "SYN-04",
+    "name": "Availability: Device offline \u2014 no response to health c (GR)",
+    "category": "availability",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "grskg1pihole01",
+      "alert_rule": "Device offline \u2014 no response to health check",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "netbox",
+        "ping"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "SYN-05",
+    "name": "Availability: Device Down! Due to no ICMP response. (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve02",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "netbox",
+        "ping"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "SYN-06",
+    "name": "Resource: CPU usage exceeds 90% threshold (NL)",
+    "category": "resource",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve01",
+      "alert_rule": "CPU usage exceeds 90% threshold",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "resource",
+        "usage"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "resource"
+    }
+  },
+  {
+    "id": "SYN-07",
+    "name": "Resource: Memory usage critical \u2014 95% utilized (GR)",
+    "category": "resource",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "GRSKG01PVE01",
+      "alert_rule": "Memory usage critical \u2014 95% utilized",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "resource",
+        "usage"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "resource"
+    }
+  },
+  {
+    "id": "SYN-08",
+    "name": "Resource: High CPU load average on host (NL)",
+    "category": "resource",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "  nl-gpu01  ",
+      "alert_rule": "High CPU load average on host",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "resource",
+        "usage"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "resource"
+    }
+  },
+  {
+    "id": "SYN-09",
+    "name": "Resource: Swap usage exceeds 80% (NL)",
+    "category": "resource",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nllei1pve02",
+      "alert_rule": "Swap usage exceeds 80%",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "resource",
+        "usage"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "resource"
+    }
+  },
+  {
+    "id": "SYN-10",
+    "name": "Resource: OOM condition detected on host (GR)",
+    "category": "resource",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-pve02",
+      "alert_rule": "OOM condition detected on host",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "resource",
+        "usage"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "resource"
+    }
+  },
+  {
+    "id": "SYN-11",
+    "name": "Storage: Disk usage exceeds 90% on /data (NL)",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-nas01",
+      "alert_rule": "Disk usage exceeds 90% on /data",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "storage",
+        "disk"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "SYN-12",
+    "name": "Storage: iSCSI LUN latency exceeds 50ms threshold (GR)",
+    "category": "storage",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "GRSKG01PVE02",
+      "alert_rule": "iSCSI LUN latency exceeds 50ms threshold",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "storage",
+        "disk"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "SYN-13",
+    "name": "Storage: NFS mount stale on Synology target (NL)",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "  nl-nas02  ",
+      "alert_rule": "NFS mount stale on Synology target",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "storage",
+        "disk"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "SYN-14",
+    "name": "Storage: Storage pool usage critical \u2014 92% full (NL)",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "nllei1pve01",
+      "alert_rule": "Storage pool usage critical \u2014 92% full",
+      "severity": "warning",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "storage",
+        "disk"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "SYN-15",
+    "name": "Storage: SeaweedFS volume server unreachable (NL)",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "nl-nas01",
+      "alert_rule": "SeaweedFS volume server unreachable",
+      "severity": "critical",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "storage",
+        "disk"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "SYN-16",
+    "name": "Network: Port status up/down on interface Gigabit (NL)",
+    "category": "network",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-fw01",
+      "alert_rule": "Port status up/down on interface GigabitEthernet0/24",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "interface",
+        "network"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "SYN-17",
+    "name": "Network: BGP neighbor 10.0.X.X down (GR)",
+    "category": "network",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "GRSKG01FW01",
+      "alert_rule": "BGP neighbor 10.0.X.X down",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "interface",
+        "network"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "SYN-18",
+    "name": "Network: VLAN 181 trunk port flapping (NL)",
+    "category": "network",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "  nl-fw01  ",
+      "alert_rule": "VLAN 181 trunk port flapping",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "interface",
+        "network"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "SYN-19",
+    "name": "Network: Interface down on Gi0/12 \u2014 CRC errors (GR)",
+    "category": "network",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "grskg1fw01",
+      "alert_rule": "Interface down on Gi0/12 \u2014 CRC errors",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "interface",
+        "network"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "SYN-20",
+    "name": "Network: VPN tunnel to gr-fw01 unreachable (NL)",
+    "category": "network",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-fw01",
+      "alert_rule": "VPN tunnel to gr-fw01 unreachable",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "interface",
+        "network"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "SYN-21",
+    "name": "Kubernetes: ContainerOOMKilled (NL)",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "ContainerOOMKilled",
+      "namespace": "logging",
+      "severity": "critical",
+      "status": "firing",
+      "pod": "loki-0"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "kubectl",
+        "pod"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "SYN-22",
+    "name": "Kubernetes: etcdInsufficientMembers (NL)",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "etcdInsufficientMembers",
+      "namespace": "kube-system",
+      "severity": "warning",
+      "status": "firing",
+      "pod": "etcd-ctrl01"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "kubectl",
+        "pod"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "SYN-23",
+    "name": "Kubernetes: KubePodCrashLooping (GR)",
+    "category": "kubernetes",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "KubePodCrashLooping",
+      "namespace": "monitoring",
+      "severity": "critical",
+      "status": "firing",
+      "pod": "prometheus-0"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "kubectl",
+        "pod"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "SYN-24",
+    "name": "Kubernetes: CiliumAgentUnhealthy (NL)",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "CiliumAgentUnhealthy",
+      "namespace": "kube-system",
+      "severity": "warning",
+      "status": "firing",
+      "pod": "cilium-agent-abc12"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "kubectl",
+        "pod"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "SYN-25",
+    "name": "Kubernetes: NodeNotReady (GR)",
+    "category": "kubernetes",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "NodeNotReady",
+      "namespace": "",
+      "severity": "critical",
+      "status": "firing",
+      "instance": "grk8sctrl02"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "kubectl",
+        "pod"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "SYN-26",
+    "name": "Certificate: TLS certificate expiring in 7 days for m (NL)",
+    "category": "certificate",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "nl-pve01",
+      "alert_rule": "TLS certificate expiring in 7 days for matrix.example.net",
+      "severity": "critical",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "certificate",
+        "expir"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "SYN-27",
+    "name": "Certificate: SSL certificate expired on n8n.nuclearli (NL)",
+    "category": "certificate",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "NLLEI01PVE03",
+      "alert_rule": "SSL certificate expired on n8n.example.net",
+      "severity": "warning",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "certificate",
+        "expir"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "SYN-28",
+    "name": "Certificate: Certificate expiry warning \u2014 3 days rema (GR)",
+    "category": "certificate",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "  gr-pve01  ",
+      "alert_rule": "Certificate expiry warning \u2014 3 days remaining",
+      "severity": "critical",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "certificate",
+        "expir"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "SYN-29",
+    "name": "Certificate: TLS handshake failure on port 443 (NL)",
+    "category": "certificate",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "nllei1pve02",
+      "alert_rule": "TLS handshake failure on port 443",
+      "severity": "warning",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "certificate",
+        "expir"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "SYN-30",
+    "name": "Certificate: Certificate chain incomplete \u2014 missing i (GR)",
+    "category": "certificate",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "hostname": "gr-pve02",
+      "alert_rule": "Certificate chain incomplete \u2014 missing intermediate",
+      "severity": "critical",
+      "state": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "certificate",
+        "expir"
+      ],
+      "confidence_range": [
+        0.3,
+        0.9
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "certificate"
+    }
+  },
+  {
+    "id": "SYN-31",
+    "name": "Maintenance: Scheduled maintenance on PVE host \u2014 kern (NL)",
+    "category": "maintenance",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve02",
+      "alert_rule": "Scheduled maintenance on PVE host \u2014 kernel upgrade",
+      "severity": "warning",
+      "state": "alert",
+      "maintenance_context": true
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "maintenance",
+        "scheduled"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "maintenance"
+    }
+  },
+  {
+    "id": "SYN-32",
+    "name": "Maintenance: Firmware upgrade in progress on Synology (NL)",
+    "category": "maintenance",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "NLLEI01SYNO01",
+      "alert_rule": "Firmware upgrade in progress on Synology NAS",
+      "severity": "warning",
+      "state": "alert",
+      "maintenance_context": true
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "maintenance",
+        "scheduled"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "maintenance"
+    }
+  },
+  {
+    "id": "SYN-33",
+    "name": "Maintenance: Scheduled reboot \u2014 ASA watchdog timer ex (GR)",
+    "category": "maintenance",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "  gr-fw01  ",
+      "alert_rule": "Scheduled reboot \u2014 ASA watchdog timer expiring",
+      "severity": "warning",
+      "state": "alert",
+      "maintenance_context": true
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "maintenance",
+        "scheduled"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "maintenance"
+    }
+  },
+  {
+    "id": "SYN-34",
+    "name": "Maintenance: Maintenance window active \u2014 K8s node dra (NL)",
+    "category": "maintenance",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nllei1k8swrkr01",
+      "alert_rule": "Maintenance window active \u2014 K8s node drain",
+      "severity": "warning",
+      "state": "alert",
+      "maintenance_context": true
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "maintenance",
+        "scheduled"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "maintenance"
+    }
+  },
+  {
+    "id": "SYN-35",
+    "name": "Maintenance: Scheduled upgrade \u2014 PVE host kernel 6.8  (GR)",
+    "category": "maintenance",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-pve01",
+      "alert_rule": "Scheduled upgrade \u2014 PVE host kernel 6.8 to 6.11",
+      "severity": "warning",
+      "state": "alert",
+      "maintenance_context": true
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "maintenance",
+        "scheduled"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "maintenance"
+    }
+  },
+  {
+    "id": "SYN-36",
+    "name": "Correlated: Service up/down \u2014 3 hosts (NL)",
+    "category": "correlated",
+    "site": "nl",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": [
+        "nl-pve01",
+        "nl-pve02",
+        "nl-pve03"
+      ],
+      "alert_rule": "Service up/down",
+      "severity": "critical",
+      "burst_count": 3,
+      "burst_window_minutes": 5
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "correlated",
+        "shared root cause"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "SYN-37",
+    "name": "Correlated: Device Down! \u2014 3 hosts (GR)",
+    "category": "correlated",
+    "site": "gr",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": [
+        "gr-pve01",
+        "gr-pve02",
+        "gr-pihole01"
+      ],
+      "alert_rule": "Device Down!",
+      "severity": "warning",
+      "burst_count": 3,
+      "burst_window_minutes": 5
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "correlated",
+        "shared root cause"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "SYN-38",
+    "name": "Correlated: Node NotReady \u2014 3 hosts (NL)",
+    "category": "correlated",
+    "site": "nl",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": [
+        "nlk8swrkr01",
+        "nlk8swrkr02",
+        "nlk8swrkr03"
+      ],
+      "alert_rule": "Node NotReady",
+      "severity": "critical",
+      "burst_count": 3,
+      "burst_window_minutes": 5
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "correlated",
+        "shared root cause"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "SYN-39",
+    "name": "Correlated: Storage offline \u2014 2 hosts (NL)",
+    "category": "correlated",
+    "site": "nl",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": [
+        "nl-nas01",
+        "nl-nas02"
+      ],
+      "alert_rule": "Storage offline",
+      "severity": "warning",
+      "burst_count": 2,
+      "burst_window_minutes": 5
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": [
+        "correlated",
+        "shared root cause"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "SYN-40",
+    "name": "Correlated: Multiple alerts \u2014 4 hosts (GR)",
+    "category": "correlated",
+    "site": "gr",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": [
+        "grk8sctrl01",
+        "grk8sctrl02",
+        "grk8sctrl03",
+        "gr-fw01"
+      ],
+      "alert_rule": "Multiple alerts",
+      "severity": "critical",
+      "burst_count": 4,
+      "burst_window_minutes": 5
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": [
+        "correlated",
+        "shared root cause"
+      ],
+      "confidence_range": [
+        0.3,
+        0.8
+      ],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  }
+]
