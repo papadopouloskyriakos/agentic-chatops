@@ -1,0 +1,162 @@
+[
+  {
+    "id": "H01",
+    "category": "multi-hop",
+    "query": "What caused the cascade from Freedom PPPoE down to GR device alerts on 2026-04-08, and what was the specific recovery command?",
+    "ground_truth": "Freedom ISP PPPoE went down (ASA outside_freedom IP unassigned). VPN tunnels to GR traversed Freedom, so GR devices became unreachable from NL monitoring. Recovery: power-cycle the ONT or contact Freedom ISP. xs4all auto-fails-over via SLA tracking.",
+    "must_retrieve_any_of": ["IFRNLLEI01PRD-381", "Freedom ISP PPPoE", "xs4all VTI", "SLA failover"],
+    "adversarial_near_misses": ["n8n 503 outage", "SeaweedFS replication", "K8s apiserver memory"]
+  },
+  {
+    "id": "H02",
+    "category": "symptom-to-root",
+    "query": "Downstream service flapping but no direct alert on the service itself — what class of root cause should I check first?",
+    "ground_truth": "Check underlying PVE host pressure (memory/IO) first — pve01 memory pressure has caused 754 apiserver restarts, n8n SQLite mutex timeouts, and cluster-wide cascades without alerting on the service directly.",
+    "must_retrieve_any_of": ["pve01 memory pressure", "apiserver restart", "IO pressure", "n8n SQLite"],
+    "adversarial_near_misses": ["ASA BGP", "DMZ disk full", "Zigbee permit-join"]
+  },
+  {
+    "id": "H03",
+    "category": "multi-hop",
+    "query": "GR isolated for 3h25m on 2026-04-17 — what was the actual root cause layer 1, and what layer was deceptive?",
+    "ground_truth": "Layer 1 root cause: stale IPsec SA on Tunnel4 (Freedom VTI to GR). Fix: `clear crypto ipsec sa peer 203.0.113.X`. The deceptive layer was `clear conn` being a 0-deleted no-op, misleading triage into thinking connections were fine while SAs were stale.",
+    "must_retrieve_any_of": ["stale IPsec SA", "Tunnel4", "clear crypto ipsec sa", "vti-freedom-recovery", "GR isolation"],
+    "adversarial_near_misses": ["Freedom PPPoE", "DMZ disk full", "BGP ECMP"]
+  },
+  {
+    "id": "H04",
+    "category": "oblique-phrase",
+    "query": "Our 'chaos engineer' kept yelling about 'shun' during an experiment — why?",
+    "ground_truth": "ASA threat detection treats VTI endpoints as suspicious during rapid up/down cycles and issues shun commands, blocking legitimate traffic. Must `clear shun` after tunnel chaos experiments.",
+    "must_retrieve_any_of": ["ASA shun", "threat detection", "clear shun", "chaos tunnel"],
+    "adversarial_near_misses": ["BGP peer down", "iBGP full mesh", "maximum-paths ibgp"]
+  },
+  {
+    "id": "H05",
+    "category": "specific-cmd",
+    "query": "What maximum-paths value on the ASAs prevents ECMP asymmetric routing, and what specific symptom did the wrong value cause?",
+    "ground_truth": "Set `maximum-paths ibgp 1` on both NL and GR ASAs. The wrong value (4, default) caused AWX-to-VPS-loopback intermittent timeouts due to tcp-not-syn from asymmetric return paths.",
+    "must_retrieve_any_of": ["maximum-paths ibgp 1", "ECMP asymmetric", "AWX-to-VPS", "tcp-not-syn"],
+    "adversarial_near_misses": ["ASA EEM reboot", "ASA crypto-map delete-recreate", "BGP next-hop"]
+  },
+  {
+    "id": "H06",
+    "category": "timeboxed",
+    "query": "Incidents in the 72 hours ending 2026-04-17 affecting either site's DMZ.",
+    "ground_truth": "gr-dmz01 disk full on 2026-04-17 caused Ansible UNREACHABLE; daily cleanup cron added. DMZ01 OOM on 2026-04-13 led to ASA shunning DMZ IP because DMZ subnet was not in shun whitelist.",
+    "must_retrieve_any_of": ["gr-dmz01", "dmz-cleanup", "DMZ OOM", "shun whitelist"],
+    "adversarial_near_misses": ["SeaweedFS", "GR isolation", "Freedom PPPoE"]
+  },
+  {
+    "id": "H07",
+    "category": "similar-hostnames",
+    "query": "pve01 versus pve02 — when one goes down, how do they differ in blast radius?",
+    "ground_truth": "nl-pve01 hosts n8n, DNS, gateway, monitoring — outage affects alert pipeline itself. nl-pve02 on syno01 has minimal impact since K8s retains quorum with other control-plane nodes.",
+    "must_retrieve_any_of": ["pve01", "pve02", "blast radius", "critical hosts", "K8s quorum"],
+    "adversarial_near_misses": ["gr-pve01", "iSCSI ZFS", "GR maintenance"]
+  },
+  {
+    "id": "H08",
+    "category": "negation",
+    "query": "We explicitly do NOT want which technique during K8s cluster repair?",
+    "ground_truth": "Do NOT use kubectl directly — all K8s changes must go through OpenTofu + Atlantis MR. The feedback memory `feedback_k8s_strict_gitops` is unambiguous.",
+    "must_retrieve_any_of": ["kubectl", "GitOps", "Atlantis", "OpenTofu", "no kubectl"],
+    "adversarial_near_misses": ["helm_replace", "pod crashloop", "apiserver restart"]
+  },
+  {
+    "id": "H09",
+    "category": "abbreviation",
+    "query": "S2S VPN fiasco in April 2026 — one-line summary and lesson.",
+    "ground_truth": "Migrated from crypto-maps to VTI + full BGP inter-site routing on 2026-04-09. Lesson: VPS FRR update-source must use VTI /31 IP, not loopback, otherwise ASAs cannot resolve BGP next-hops.",
+    "must_retrieve_any_of": ["VTI migration", "BGP inter-site", "update-source VTI", "loopback"],
+    "adversarial_near_misses": ["ipsec.conf migration", "swanctl restart", "S2S crypto-map"]
+  },
+  {
+    "id": "H10",
+    "category": "cross-signal",
+    "query": "A chaos experiment broke 6 tunnels and 7 BGP peers — what experiment and what host?",
+    "ground_truth": "Chaos experiment chaos-2026-04-13-014 targeting gr-dmz01 (chaos-dmz type). Verdict FAIL: vpn_tunnels 6→0, bgp_peers pre-established 7, all lost.",
+    "must_retrieve_any_of": ["chaos-2026-04-13-014", "gr-dmz01", "chaos-dmz", "verdict FAIL"],
+    "adversarial_near_misses": ["iBGP full mesh", "VTI BGP fix", "FRR restart"]
+  },
+  {
+    "id": "H11",
+    "category": "corroboration",
+    "query": "Which two independent incidents pointed at the SAME root cause (pve01 memory pressure) within 48 hours?",
+    "ground_truth": "IFRNLLEI01PRD-566/567 apiserver restarts 2026-04-15 AND IFRNLLEI01PRD-589 n8n SQLite mutex timeout 2026-04-16. Both traced to pve01 IO/memory pressure from androidsdk01 LXC.",
+    "must_retrieve_any_of": ["pve01 memory", "androidsdk01", "apiserver restart", "n8n SQLite mutex"],
+    "adversarial_near_misses": ["iSCSI contention", "SeaweedFS filer", "GR isolation"]
+  },
+  {
+    "id": "H12",
+    "category": "policy",
+    "query": "Our ASAs suppress default config values — what does this imply when comparing running config to git IaC?",
+    "ground_truth": "ASA auto-sync normalizes running config into git every 30min. Change the LIVE DEVICE FIRST, then let auto-sync bring git in line. Do not open human MRs ahead of the live change, because ASA suppression causes the MR diff to misrepresent actual config.",
+    "must_retrieve_any_of": ["Cisco IaC device is truth", "auto-sync", "ASA suppresses", "show run"],
+    "adversarial_near_misses": ["ASA crypto-map delete-recreate", "ASA SSH", "ASA reboot"]
+  },
+  {
+    "id": "H13",
+    "category": "obscure",
+    "query": "MeshSat zigbee permit-join fails on a restored mesh even when broadcast is attempted — what's the fix?",
+    "ground_truth": "Z-Stack 2.7.1 rejects broadcast permit-join (0xC2) on fresh-restored networks. Fix: send unicast permit-join addressed to the coordinator itself (self-target).",
+    "must_retrieve_any_of": ["Z-Stack 2.7.1", "unicast permit-join", "self-target", "0xC2 broadcast"],
+    "adversarial_near_misses": ["RTL-SDR spectrum", "cp210x wedge", "MeshSat hub alerts"]
+  },
+  {
+    "id": "H14",
+    "category": "causal-ambiguity",
+    "query": "When the BGP ECMP bug fired, engineers at first blamed VPN; the real cause was what, and what command exposed the asymmetry?",
+    "ground_truth": "Real cause: maximum-paths ibgp 4 (default) caused asymmetric routing through stateful ASAs, which dropped tcp-not-syn packets. Fix: maximum-paths ibgp 1. Exposure: VPS loopback pings timing out intermittently — not a VPN issue.",
+    "must_retrieve_any_of": ["maximum-paths ibgp", "tcp-not-syn", "VPS loopback", "ECMP asymmetric"],
+    "adversarial_near_misses": ["IPsec SA stale", "Freedom PPPoE", "swanctl reload"]
+  },
+  {
+    "id": "H15",
+    "category": "recency",
+    "query": "What is the most recently added dead-man-switch on the infrastructure?",
+    "ground_truth": "gr-dmz01 / nl-dmz01 daily `dmz-cleanup` cron (05:45 UTC) added 2026-04-17 after disk-full cascade. Also cert_sync banner on sync_certs_to_edge.yml (commit 328c6f7) ends silent skip observability gap.",
+    "must_retrieve_any_of": ["dmz-cleanup cron", "daily 05:45 UTC", "sync_certs_to_edge banner", "silent-skip"],
+    "adversarial_near_misses": ["chaos weekly cron", "dead-man watchdog */1", "vti-freedom-recovery"]
+  },
+  {
+    "id": "H16",
+    "category": "metric-recall",
+    "query": "Current RAG faithfulness, context precision, and context recall scores on the golden set?",
+    "ground_truth": "Faithfulness 0.99, context precision ~0.96, context recall ~0.99 on 18-query golden set. Note: golden set is saturated — does not differentiate new retrieval features.",
+    "must_retrieve_any_of": ["RAGAS", "faithfulness 0.88", "faithfulness 1.0", "golden set saturated"],
+    "adversarial_near_misses": ["wiki-compile", "MemPalace", "chaos baseline"]
+  },
+  {
+    "id": "H17",
+    "category": "silent-failure",
+    "query": "Which process previously stored data without embeddings, regrew the gap silently, and how is it fixed?",
+    "ground_truth": "session_transcripts writer (`archive-session-transcript.py`) had `embed=False` default and no `search_document:` prefix — 837 rows accumulated without embeddings. Fixed 2026-04-17: embed=True default + asymmetric prefix + num_ctx.",
+    "must_retrieve_any_of": ["session_transcripts", "archive-session-transcript", "837 rows", "search_document prefix"],
+    "adversarial_near_misses": ["wiki-compile cron", "kb-semantic-search embed --backfill", "llm_usage writers"]
+  },
+  {
+    "id": "H18",
+    "category": "subtle-distinction",
+    "query": "The difference between `ensure_embedding` and `search_query` prefixes matters — explain when each is used.",
+    "ground_truth": "search_query: prefix is used when embedding the USER QUERY; search_document: is used when embedding docs for storage. nomic-embed-text is asymmetric-trained: query/doc produced by the same model but with different prefixes optimize retrieval.",
+    "must_retrieve_any_of": ["search_query", "search_document", "asymmetric embeddings", "G7", "nomic-embed-text"],
+    "adversarial_near_misses": ["RAG Fusion", "HyDE fallback", "bi-encoder reranker"]
+  },
+  {
+    "id": "H19",
+    "category": "cost",
+    "query": "EUR session cost warning threshold and daily plan-only cap?",
+    "ground_truth": "EUR 5 per session warning, $25 per day plan-only cap. Both enforced in Runner workflow.",
+    "must_retrieve_any_of": ["EUR 5", "$25/day plan", "cost ceiling", "Runner workflow"],
+    "adversarial_near_misses": ["llm_usage tier 2", "tier 0 tracking", "RAGAS judge Haiku"]
+  },
+  {
+    "id": "H20",
+    "category": "meta",
+    "query": "How many RRF signals are fused in the retrieval pipeline, and with what weights?",
+    "ground_truth": "5 signals: (1) semantic on incident_knowledge, (2) keyword LIKE, (3) wiki_articles, (4) session_transcripts weight 0.3, (5) chaos_experiments weight 0.25. Semantic weight boosted to 1.5 when quality > 0.8. Post-fusion: cross-encoder-style rerank + LongContextReorder.",
+    "must_retrieve_any_of": ["5-signal RRF", "0.3 transcripts", "0.25 chaos", "Reciprocal Rank Fusion"],
+    "adversarial_near_misses": ["HyDE", "query rewrite", "wiki-compile"]
+  }
+]

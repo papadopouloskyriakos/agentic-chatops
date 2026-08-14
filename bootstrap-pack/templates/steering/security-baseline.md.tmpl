@@ -1,0 +1,30 @@
+# Steering — Security baseline (cross-cutting, agent-wide)
+
+Project-wide security rules that every change must respect.
+
+## Secrets
+
+- NEVER commit secrets to git. `.env` files MUST be in `.gitignore`.
+- All secrets are operator-provisioned via env vars or Vault (not config files).
+- If a secret is accidentally committed: rotate it immediately, then `git-filter-repo` the commit.
+
+## Input validation
+
+- All external input is JSON-Schema-validated at ingress (see `contracts/schemas/`).
+- SQL queries use parameterised binds. NEVER string-concatenate user input into SQL.
+
+## PII
+
+- No PII in logs. Logger middleware redacts: emails, phone numbers, SSNs, credit card numbers.
+- PII-containing fields in database tables are encrypted at rest.
+
+## Authentication
+
+- <Auth mechanism: e.g. JWT with rotating signing keys, OAuth2 + PKCE, mTLS>
+- Sessions expire after <N> minutes of inactivity.
+- Password hashing: argon2id (memory=64MB, iterations=3, parallelism=4).
+
+## Dependencies
+
+- Every new third-party dependency requires an ADR documenting: choice rationale, license check, maintenance signal (last release date, OSV-DB CVE count).
+- `gosec` / `bandit` / `semgrep` runs in CI; HIGH findings block merge.

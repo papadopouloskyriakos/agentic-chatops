@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.net/schemas/risk-classifier.schema.json",
+  "title": "Risk classifier output (IFRNLLEI01PRD-749 / G2.P1.1)",
+  "description": "Documents the JSON shape returned by scripts/classify-session-risk.py. The classifier is deterministic (regex patterns + category lookups, no LLM) so this schema is a no-op constraint at runtime — it serves as a contract for downstream consumers (Build Prompt riskSection injection, audit-risk-decisions.sh, session_risk_audit table).",
+  "type": "object",
+  "required": ["risk_level", "auto_approve_recommended", "signals", "plan_hash"],
+  "properties": {
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "mixed", "high"]
+    },
+    "auto_approve_recommended": {
+      "type": "boolean"
+    },
+    "signals": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Named risk signals: `category:<name>`, `mutation:<verb>`, `read_only_tools_only`, `evidence_missing:<reason>`, etc. Documented in scripts/classify-session-risk.py."
+    },
+    "plan_hash": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Hash of the plan body — used for deterministic prompt-trial bucket assignment."
+    },
+    "alert_category": {
+      "type": "string",
+      "description": "Echo of the input category, for audit traceability."
+    }
+  },
+  "additionalProperties": true
+}

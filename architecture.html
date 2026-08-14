@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1400px;
+    height: 850px;
+    background: #080d19;
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    color: #e2e8f0;
+  }
+
+  .title-bar {
+    text-align: center;
+    padding-top: 22px;
+  }
+  .title-bar h1 {
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #f1f5f9;
+  }
+  .title-bar .subtitle {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-top: 3px;
+  }
+
+  .diagram { position: relative; width: 1400px; height: 790px; }
+
+  .node {
+    position: absolute;
+    border-radius: 8px;
+    padding: 10px 16px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .node b { font-weight: 600; display: block; font-size: 13.5px; }
+  .node .sub { color: #94a3b8; font-size: 11px; }
+
+  .cluster {
+    position: absolute;
+    border-radius: 10px;
+    border: 1.5px dashed;
+  }
+  .cluster-label {
+    position: absolute;
+    top: 7px;
+    left: 12px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.1px;
+  }
+
+  .human { background: #131c2e; border: 1.5px solid #3b82f6; }
+  .room { background: #1e1b4b; border: 1.5px solid #6366f1; color: #c7d2fe; font-weight: 500; }
+  .t1 { background: #0c3b2e; border: 1.5px solid #10b981; }
+  .t1 .sub { color: #86efac; }
+  .n8n-n { background: #2c1a04; border: 1.5px solid #f59e0b; }
+  .n8n-n .sub { color: #fcd34d; }
+  .t2 { background: #0f1d3a; border: 1.5px solid #3b82f6; }
+  .t2 .sub { color: #93c5fd; }
+  .infra-n { background: #1a1f2e; border: 1px solid #475569; }
+  .infra-n .sub { color: #64748b; }
+  .yt { background: #1e1b4b; border: 1.5px solid #818cf8; }
+  .yt .sub { color: #a5b4fc; }
+
+  .matrix-cl { border-color: #6366f1; background: rgba(49,46,129,0.10); }
+  .matrix-cl .cluster-label { color: #a5b4fc; }
+  .t1-cl { border-color: #10b981; background: rgba(6,78,59,0.10); }
+  .t1-cl .cluster-label { color: #6ee7b7; }
+  .n8n-cl { border-color: #f59e0b; background: rgba(120,53,15,0.08); }
+  .n8n-cl .cluster-label { color: #fcd34d; }
+  .t2-cl { border-color: #3b82f6; background: rgba(23,37,84,0.12); }
+  .t2-cl .cluster-label { color: #93c5fd; }
+  .infra-cl { border-color: #475569; background: rgba(30,41,59,0.12); }
+  .infra-cl .cluster-label { color: #94a3b8; }
+
+  .legend {
+    position: absolute;
+    background: rgba(8,13,25,0.92);
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 10.5px;
+    line-height: 2;
+  }
+  .legend-title { font-weight: 600; font-size: 11px; color: #cbd5e1; margin-bottom: 2px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; color: #94a3b8; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+  svg.arrows { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .arr { stroke: #4b5c72; stroke-width: 1.4; fill: none; marker-end: url(#ah); }
+  .arr-d { stroke: #334155; stroke-width: 1.2; fill: none; stroke-dasharray: 5 3; }
+  .lbl { font-family: 'Segoe UI', sans-serif; font-size: 10px; fill: #7f8ea3; }
+  .lbl-bg { fill: #080d19; }
+</style>
+</head>
+<body>
+
+<div class="title-bar">
+  <h1>Two-Tier AI ChatOps Gateway</h1>
+  <div class="subtitle">Autonomous Issue Resolution via Matrix Chat  |  Self-Hosted on AS64512 Proxmox Homelab</div>
+</div>
+
+<div class="diagram">
+
+  <div class="legend" style="top:2px; left:30px;">
+    <div class="legend-title">Legend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Human / Issue Tracker</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div>Matrix Chat Server</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Tier 1 -- OpenClaw (GPT-4o)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>n8n Orchestration</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Tier 2 -- Claude Code</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#475569"></div>Infrastructure</div>
+  </div>
+
+  <svg class="arrows">
+    <defs>
+      <marker id="ah" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
+        <polygon points="0 0, 7 2.5, 0 5" fill="#5b6b80"/>
+      </marker>
+    </defs>
+
+    <!-- Human -> Matrix center -->
+    <line class="arr" x1="700" y1="52" x2="700" y2="72"/>
+
+    <!-- Matrix left -> n8n Bridge -->
+    <path class="arr" d="M 540,98 L 470,98 L 470,150"/>
+    <rect class="lbl-bg" x="370" y="110" width="130" height="13" rx="2"/>
+    <text class="lbl" x="374" y="120">@claude or !command</text>
+
+    <!-- Matrix right -> T1 OpenClaw -->
+    <path class="arr" d="M 860,98 L 930,98 L 930,150"/>
+    <rect class="lbl-bg" x="935" y="110" width="152" height="13" rx="2"/>
+    <text class="lbl" x="938" y="120">@openclaw or unaddressed</text>
+
+    <!-- OpenClaw Answer -> Matrix (loop right) -->
+    <path class="arr" d="M 1115,175 L 1155,175 L 1155,88 L 860,88"/>
+    <text class="lbl" x="1160" y="135">Answer</text>
+
+    <!-- Bridge -> Runner -->
+    <line class="arr" x1="430" y1="228" x2="475" y2="268"/>
+
+    <!-- escalate -> Runner (webhook) -->
+    <path class="arr" d="M 870,290 L 610,290"/>
+    <rect class="lbl-bg" x="695" y="278" width="88" height="13" rx="2"/>
+    <text class="lbl" x="698" y="288">Webhook POST</text>
+
+    <!-- lookup -> YouTrack -->
+    <line class="arr" x1="1045" y1="308" x2="1045" y2="348"/>
+    <text class="lbl" x="1053" y="332">Live data</text>
+
+    <!-- Runner -> Matrix (response loop left) -->
+    <path class="arr" d="M 395,285 L 310,285 L 310,88 L 540,88"/>
+    <text class="lbl" x="260" y="200">Response</text>
+
+    <!-- Runner -> T2 CLI (SSH) -->
+    <line class="arr" x1="505" y1="318" x2="505" y2="450"/>
+    <text class="lbl" x="512" y="390">SSH</text>
+
+    <!-- Session End -> YouTrack (summary) -->
+    <path class="arr" d="M 665,205 L 990,358"/>
+    <rect class="lbl-bg" x="828" y="272" width="105" height="13" rx="2"/>
+    <text class="lbl" x="831" y="282">Summary comment</text>
+
+    <!-- YouTrack -> Runner (issue state webhook) -->
+    <path class="arr" d="M 990,395 L 730,395 L 610,310"/>
+    <rect class="lbl-bg" x="755" y="399" width="105" height="13" rx="2"/>
+    <text class="lbl" x="758" y="409">Issue state change</text>
+
+    <!-- CLI -> Repos -->
+    <line class="arr" x1="445" y1="510" x2="395" y2="548"/>
+    <!-- CLI -> MCP -->
+    <line class="arr" x1="565" y1="510" x2="615" y2="548"/>
+
+    <!-- T2 -> Infra dashed -->
+    <line class="arr-d" x1="445" y1="610" x2="445" y2="650"/>
+    <line class="arr-d" x1="645" y1="610" x2="645" y2="650"/>
+  </svg>
+
+  <!-- ====== NODES ====== -->
+
+  <!-- Human -->
+  <div class="node human" style="left:590px; top:8px; width:220px;">
+    <b>Human Operator</b>
+    <span class="sub">Matrix Client  |  YouTrack</span>
+  </div>
+
+  <!-- Matrix -->
+  <div class="cluster matrix-cl" style="left:450px; top:70px; width:500px; height:48px;">
+    <div class="cluster-label">Matrix Server -- Self-Hosted</div>
+  </div>
+  <div class="node room" style="left:560px; top:78px; padding:5px 20px;">#chatops</div>
+  <div class="node room" style="left:670px; top:78px; padding:5px 20px;">#cubeos</div>
+  <div class="node room" style="left:780px; top:78px; padding:5px 20px;">#meshsat</div>
+
+  <!-- n8n cluster -->
+  <div class="cluster n8n-cl" style="left:300px; top:146px; width:420px; height:186px;">
+    <div class="cluster-label">n8n Automation -- Orchestration Layer</div>
+  </div>
+  <div class="node n8n-n" style="left:330px; top:173px; width:200px;">
+    <b>Matrix Bridge</b>
+    <span class="sub">!session  |  !issue  |  !pipeline  |  !mode</span>
+  </div>
+  <div class="node n8n-n" style="left:560px; top:173px; width:140px;">
+    <b>Session End</b>
+    <span class="sub">Summary to YouTrack</span>
+  </div>
+  <div class="node n8n-n" style="left:395px; top:262px; width:215px;">
+    <b>Claude Runner</b>
+    <span class="sub">Lock guard  |  Cooldown  |  SSH exec</span>
+  </div>
+
+  <!-- T1 cluster -->
+  <div class="cluster t1-cl" style="left:815px; top:146px; width:310px; height:178px;">
+    <div class="cluster-label">Tier 1 -- OpenClaw -- Fast Triage (7-21s)</div>
+  </div>
+  <div class="node t1" style="left:848px; top:170px; width:245px;">
+    <b>OpenClaw Agent</b>
+    <span class="sub">GPT-4o via OpenAI  |  500 RPM  |  ~$3-5/mo</span>
+  </div>
+  <div class="node t1" style="left:840px; top:250px; width:120px; padding:7px 8px;">
+    <b style="font-size:11.5px;">escalate-to-claude</b>
+    <span class="sub">Trigger Tier 2</span>
+  </div>
+  <div class="node t1" style="left:980px; top:250px; width:115px; padding:7px 8px;">
+    <b style="font-size:11.5px;">youtrack-lookup</b>
+    <span class="sub">Live issue data</span>
+  </div>
+
+  <!-- YouTrack -->
+  <div class="node yt" style="left:990px; top:353px; width:130px;">
+    <b>YouTrack</b>
+    <span class="sub">Issue Tracker</span>
+  </div>
+
+  <!-- T2 cluster -->
+  <div class="cluster t2-cl" style="left:310px; top:438px; width:420px; height:182px;">
+    <div class="cluster-label">Tier 2 -- Claude Code -- Deep Implementation (5-15 min)</div>
+  </div>
+  <div class="node t2" style="left:435px; top:462px; width:190px;">
+    <b>Claude CLI</b>
+    <span class="sub">Headless sessions via SSH</span>
+  </div>
+  <div class="node t2" style="left:338px; top:548px; width:160px;">
+    <b>12 Git Repositories</b>
+    <span class="sub">CubeOS  |  MeshSat</span>
+  </div>
+  <div class="node t2" style="left:530px; top:548px; width:165px;">
+    <b>MCP Servers</b>
+    <span class="sub">n8n  |  GitLab  |  YouTrack</span>
+  </div>
+
+  <!-- Infra -->
+  <div class="cluster infra-cl" style="left:310px; top:645px; width:420px; height:68px;">
+    <div class="cluster-label">Self-Hosted -- AS64512 -- Proxmox Homelab</div>
+  </div>
+  <div class="node infra-n" style="left:340px; top:662px; padding:4px 12px;">
+    <b style="font-size:11.5px;">claude01</b>
+    <span class="sub">n8n + Claude Code</span>
+  </div>
+  <div class="node infra-n" style="left:486px; top:662px; padding:4px 12px;">
+    <b style="font-size:11.5px;">openclaw01</b>
+    <span class="sub">OpenClaw Agent</span>
+  </div>
+  <div class="node infra-n" style="left:630px; top:662px; padding:4px 12px;">
+    <b style="font-size:11.5px;">Raspberry Pi</b>
+    <span class="sub">CubeOS Target</span>
+  </div>
+
+</div>
+
+</body>
+</html>

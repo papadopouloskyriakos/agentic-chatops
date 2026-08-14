@@ -1,0 +1,25 @@
+{
+  "governed": {
+    "schema.sql": "32edf2fe0c204f23796184c58b974eaf7a89894eef1b0d3bc2b499723dccdba2",
+    "scripts/agentic-stats.py": "f482c98cee06759ad3bf425dd652c6658e082edb1b1b1f198376ce0aba3fa5a9",
+    "scripts/check-spec-code-lockstep.py": "e8aa2684410fc596049db5d00890211f8e78019ed2584cbf9670e647e6218edd",
+    "scripts/classify-session-risk.py": "e9d2c2d943904a4e1e25a2d3a18e7005ca5f9a83face3d2abfc24f9f4b888710",
+    "scripts/infragraph-predict-plan.py": "68fdb3fbc15f88fd69e4419edef9c8c852d2bdf591d0b5e9bbdc8570cc08a00b",
+    "scripts/infragraph-verify.py": "a51c0f8ddec22b91ffd8c5e30fdf0f4a475d03c301747322fd0970529f7026f6",
+    "scripts/lib/tier1_suppression.py": "ffcec9005b292159e60518e43e190bcf33501c4d22bc3a02f759c1e9f931fcfd",
+    "scripts/queue-escalation.sh": "269497532262c18054ff3f111ce86241ea4329df019f1625082d71869d6e0d18",
+    "scripts/reconcile-completed-sessions.py": "7953cd0789804332a05e40abc337a64ee1273d9170597e046aaec760f7db30eb",
+    "scripts/requeue-escalations.py": "1cfc74d0591e7e271f94c5402616b69f61ef33479000b05641b951b1bd423c4d",
+    "scripts/run-spec-bdd.py": "0757bb42b313f686ceebf527f5159f98ef5ce3855b993f61211a16ae4b9b21ce",
+    "scripts/write-governance-metrics.py": "0a171e49dff510ff82b2400e21ef41e09ad2745f7f6c48be4ef9d77cfdf23796"
+  },
+  "specs": {
+    "001-risk-classification": "26590c02b694afb70b808d505e4901cd3d09959a6a7f8ba6acf7fdd0fe7d2ed6",
+    "002-prediction-gate": "b24d75965e4ec2050e2956b17bc6315e7b8db8fd79297e9905c094fb72d1daca",
+    "003-auto-resolve": "ae9425152864b079ae8e3f0b8e3253e5f374137cadbda9a7ae6144bc34134bbd",
+    "004-governance": "658357f7064c48e21724c774fbb33e987f9464778057bc6b36ed32fb531c8e70",
+    "005-tier1-suppression": "61fdcd4bfddeb1f882889ef54644e9765d21125cfc2804a40540adb705b6aba8",
+    "006-interfaces": "1de265f1c3d73a46fedd9ea7a6a54256cf3b050e44d58dfb5d5782576a9f721b",
+    "007-spec-governance": "eaf1fb8033c558dee10f7bce4ca8da330a86d3c6868699407d71522c4d11db16"
+  }
+}

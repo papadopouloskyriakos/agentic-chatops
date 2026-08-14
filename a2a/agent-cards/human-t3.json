@@ -1,0 +1,70 @@
+{
+  "name": "human",
+  "description": "Human operator — plan approval, override, domain knowledge injection via Matrix",
+  "url": "matrix://matrix.example.net/@dominicus",
+  "provider": {
+    "organization": "Example Corp",
+    "url": "https://example.net"
+  },
+  "version": "2026.4.15",
+
+  "lifecycle": {
+    "status": "active",
+    "decommissionProcedure": "docs/agent-decommissioning.md#tier-3-human",
+    "riskClassification": "docs/tool-risk-classification.md"
+  },
+
+  "taskStates": ["submitted", "working", "input-required", "completed", "failed", "canceled"],
+
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": true,
+    "stateTransitionHistory": false
+  },
+
+  "authentication": {
+    "schemes": ["matrix-mxid"],
+    "credentials": "@dominicus:matrix.example.net"
+  },
+
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+
+  "skills": [
+    {
+      "id": "plan-approval",
+      "name": "Plan Approval",
+      "description": "Approve or reject remediation plans via Matrix reactions or poll votes",
+      "inputModes": ["text/plain", "application/json"],
+      "tags": ["approval", "governance"]
+    },
+    {
+      "id": "override",
+      "name": "Override",
+      "description": "Override agent decisions, force-escalate, cancel sessions",
+      "tags": ["override", "governance"]
+    },
+    {
+      "id": "context-injection",
+      "name": "Context Injection",
+      "description": "Provide domain knowledge agents lack (maintenance windows, business context)",
+      "tags": ["context", "knowledge"]
+    }
+  ],
+
+  "_nla2a": {
+    "tier": 3,
+    "model": null,
+    "operators": ["@dominicus:matrix.example.net"],
+    "routing": {
+      "acceptsFrom": ["claude-code", "openclaw"],
+      "escalateTo": null
+    },
+    "approvalPolicy": {
+      "timeoutReminder": 900,
+      "timeoutPause": 1800,
+      "autoApproveThreshold": null,
+      "authorizedSenders": ["@dominicus:matrix.example.net"]
+    }
+  }
+}

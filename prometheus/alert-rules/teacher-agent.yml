@@ -1,0 +1,68 @@
+groups:
+  - name: teacher-agent-health
+    interval: 1m
+    rules:
+
+      - alert: TeacherAgentMetricsAbsent
+        expr: absent(learning_operators_total)
+        for: 15m
+        labels:
+          severity: warning
+          service: teacher-agent
+        annotations:
+          summary: "teacher-agent Prometheus textfile exporter hasn't emitted for >=15m"
+          description: |
+            write-learning-metrics.sh (*/5 cron) is expected to write
+            learning_progress.prom every 5 minutes. Absent for 15m indicates
+            the cron stopped, the SQLite DB is unreadable, or the textfile
+            collector directory disappeared. Check: `ls -la /var/lib/prometheus/node-exporter/learning_progress.prom`
+            on nl-claude01 and `tail ~/logs/claude-gateway/write-learning-metrics.log`.
+          impact: "Learning progress observability blind. Crons themselves (morning-nudge, class-digest) may still be firing — this alert is about the *metric pipeline* only."
+
+      - alert: TeacherAgentMorningNudgeStale
+        expr: time() - learning_morning_nudge_last_run_timestamp > 129600
+        for: 1h
+        labels:
+          severity: warning
+          service: teacher-agent
+        annotations:
+          summary: "Morning-nudge cron hasn't fired for >=36h"
+          description: |
+            The daily 08:30 UTC `teacher-agent.py --morning-nudge` cron touches
+            /var/lib/claude-gateway/teacher-morning_nudge.last on success. If the
+            epoch gap exceeds 36h the cron is either broken or disabled. Operators
+            won't see due-topics reminders.
+          impact: "Operators no longer pinged about due lessons. Progression stalls."
+
+      - alert: TeacherAgentClassDigestStale
+        expr: time() - learning_class_digest_last_run_timestamp > 1209600
+        for: 6h
+        labels:
+          severity: warning
+          service: teacher-agent
+        annotations:
+          summary: "Weekly class-digest cron hasn't fired for >=14d"
+          description: |
+            The Sunday 16:00 UTC class-digest cron touches
+            /var/lib/claude-gateway/teacher-class_digest.last on success. Gap >14d
+            means two consecutive weeks missed — cron broken or the #learning
+            Matrix room unreachable.
+          impact: "No weekly aggregate posted to #learning. Classroom feels abandoned."
+
+      - alert: TeacherAgentDMFetchStale
+        expr: time() - learning_dm_fetch_last_run_timestamp > 600
+        for: 15m
+        labels:
+          severity: warning
+          service: teacher-agent
+        annotations:
+          summary: "matrix-bridge Fetch Operator DMs SSH hasn't succeeded for >=10m"
+          description: |
+            The matrix-bridge polls every 30s and its Fetch Operator DMs SSH node
+            touches /var/lib/claude-gateway/teacher-dm_fetch.last on success.
+            A gap >10m means either the SSH node is failing (can't reach
+            app-user), SQLite is locked, or the bridge schedule trigger
+            stopped firing. Bridge falls back to the static ROOM_MAP — single-
+            operator still works, but new operators in #learning won't have
+            their DMs routed.
+          impact: "Multi-operator DM support silently degrades to single-operator static config."

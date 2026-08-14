@@ -1,0 +1,62 @@
+{
+  "id": "renovate-mr-autonomy",
+  "name": "NL - Renovate MR Autonomy",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gitlab-mr",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-mr",
+      "name": "GitLab MR Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "gitlab-mr"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      },
+      "id": "respond-200",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "=bash /app/claude-gateway/scripts/renovate-mr-gate.sh --event-json - <<'RENOVATE_MR_EOF'\n{{ JSON.stringify($('GitLab MR Webhook').first().json.body || $('GitLab MR Webhook').first().json) }}\nRENOVATE_MR_EOF"
+      },
+      "id": "run-gate",
+      "name": "Run Renovate Gate",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "continueOnFail": true,
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "GitLab MR Webhook": {
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
+    },
+    "Respond 200": {
+      "main": [[{ "node": "Run Renovate Gate", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

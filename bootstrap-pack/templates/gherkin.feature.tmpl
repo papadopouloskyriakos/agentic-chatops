@@ -1,0 +1,29 @@
+Feature: User registration (example)
+  As a new user
+  I want to register an account
+  So that I can access the protected API
+
+  REQ-002: When a user submits valid registration JSON to POST /auth/register,
+           the system shall return 201 with the stored user record.
+
+  Scenario: Successful registration with valid JSON
+    Given the system has no user with email "alice@example.net"
+    When a POST is made to /auth/register with body:
+      """
+      {"email": "alice@example.net", "password_hash": "$argon2id$v=19$m=65536$..."}
+      """
+    Then the response status is 201
+    And the response body contains the field "id"
+    And the response body field "email" equals "alice@example.net"
+
+  REQ-003: If the registration JSON fails schema validation,
+           then the system shall return 422 with a per-field error list.
+
+  Scenario: Registration fails on missing email
+    When a POST is made to /auth/register with body:
+      """
+      {"password_hash": "$argon2id$..."}
+      """
+    Then the response status is 422
+    And the response body field "errors[0].field" equals "email"
+    And the response body field "errors[0].message" contains "required"

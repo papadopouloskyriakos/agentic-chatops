@@ -1,0 +1,17 @@
+[Unit]
+Description=Alertmanager -> Twilio SMS bridge for tier-1 critical alerts
+Documentation=https://gitlab.example.net/n8n/claude-gateway/-/blob/main/scripts/alertmanager-twilio-bridge.py
+After=default.target network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /app/claude-gateway/scripts/alertmanager-twilio-bridge.py
+Restart=on-failure
+RestartSec=10s
+Environment=HOME=/home/app-user
+Environment=AM_TWILIO_PORT=9106
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,36 @@
+# Live IaC working-checkout drift alerts (promtool test+doc copy).
+# Deployed truth: infrastructure/nl/production k8s/namespaces/monitoring/iac-checkout-drift-alerts.tf
+# Edit BOTH when changing an alert. Metric source: sync-live-iac-checkouts.sh (daily cron on nl-claude01).
+groups:
+  - name: iac-checkout-drift
+    rules:
+      - alert: IaCCheckoutStrandedOffMain
+        expr: iac_checkout_on_default_branch == 0
+        for: 6h
+        labels:
+          severity: warning
+          category: iac-hygiene
+        annotations:
+          summary: "Live IaC checkout {{ $labels.repo }} stranded on branch {{ $labels.branch }}"
+          description: >
+            The live IaC checkout {{ $labels.repo }} on nl-claude01 has been on a non-default
+            branch ({{ $labels.branch }}) for 6h+ and sync-live-iac-checkouts.sh could not auto-heal
+            it (only a CLEAN, no-commits-ahead checkout auto-switches). Reads/edits hit stale IaC.
+      - alert: IaCCheckoutDirtyStale
+        expr: iac_checkout_dirty > 0
+        for: 24h
+        labels:
+          severity: warning
+          category: iac-hygiene
+        annotations:
+          summary: "Live IaC checkout {{ $labels.repo }} has uncommitted changes for 24h+"
+          description: "{{ $value }} uncommitted file(s) have sat in {{ $labels.repo }} for 24h+ — commit via MR or discard/stash."
+      - alert: IaCCheckoutGuardStale
+        expr: (time() - iac_checkout_sync_last_run_timestamp > 172800) or absent(iac_checkout_sync_last_run_timestamp)
+        for: 1h
+        labels:
+          severity: warning
+          category: iac-hygiene
+        annotations:
+          summary: "IaC-checkout drift guard has not run in 2+ days"
+          description: "sync-live-iac-checkouts.sh (daily cron) has not emitted iac_checkout_sync_last_run_timestamp in 2+ days — drift auto-heal + detection is dark."

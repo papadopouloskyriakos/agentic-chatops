@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.net/schemas/session_risk_audit.json",
+  "title": "session_risk_audit",
+  "description": "One row per risk classification decision (REQ-503, REQ-505).",
+  "type": "object",
+  "required": ["issue_id", "risk_level", "band", "plan_hash", "schema_version"],
+  "additionalProperties": true,
+  "properties": {
+    "issue_id": { "type": "string" },
+    "risk_level": { "type": "string", "enum": ["low", "mixed", "high"] },
+    "band": { "type": "string", "enum": ["AUTO", "AUTO_NOTICE", "POLL_PAUSE"] },
+    "auto_approved": { "type": "integer", "enum": [0, 1] },
+    "sms_required": { "type": "integer", "enum": [0, 1] },
+    "plan_hash": { "type": "string" },
+    "schema_version": { "type": "integer", "minimum": 1 }
+  }
+}
