@@ -1,0 +1,18 @@
+{
+  "name": "claude-gateway-visual-audit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visual audit suite for Matrix + YouTrack message formatting",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:matrix": "npx playwright test matrix-visual",
+    "test:youtrack": "npx playwright test youtrack-visual",
+    "baseline": "AUDIT_MODE=baseline npx playwright test",
+    "improved": "AUDIT_MODE=improved npx playwright test",
+    "compare": "node helpers/compare-report.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "dotenv": "^16.4.7"
+  }
+}

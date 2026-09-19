@@ -1,0 +1,4 @@
+{"feature_id":"001-foo","tasks":[
+  {"task_id":"T-001","title":"a","files_owned":["shared.go"],"prompt":"x","dependencies":[],"parallelizable":true,"bounded_context":"a","requirement_ids":["REQ-001"],"acceptance_test":"go test","complexity":3,"risk_score":0.3,"max_wall_clock_minutes":15,"max_loc_delta":100},
+  {"task_id":"T-002","title":"b","files_owned":["shared.go"],"prompt":"x","dependencies":[],"parallelizable":true,"bounded_context":"a","requirement_ids":["REQ-002"],"acceptance_test":"go test","complexity":3,"risk_score":0.3,"max_wall_clock_minutes":15,"max_loc_delta":100}
+]}

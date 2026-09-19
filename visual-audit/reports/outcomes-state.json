@@ -1,0 +1,395 @@
+{
+  "blockExists": true,
+  "header": "Outcomes",
+  "outcomeCount": 2,
+  "labels": [
+    "Auto-resolve",
+    "Closed-loop time"
+  ],
+  "values": [
+    "6%",
+    "4m 39s"
+  ],
+  "subs": [
+    "rolling 7d",
+    "last 7d · alert → terminal state"
+  ],
+  "feet": [
+    "−34.0 ppvs prior 7d",
+    "+1m 54smedian vs prior 7d47 open"
+  ],
+  "deltaClasses": [
+    "as-outcome-delta as-delta-bad",
+    "as-outcome-delta as-delta-bad"
+  ],
+  "sparkExists": true,
+  "sparkAria": "Auto-resolve rolling 7d over last 56 days, 13 days with data, current 6%",
+  "polylinePts": "92.7,10.9 94.8,13.0 96.9,14.3 99.0,15.6 101.1,17.0 103.2,17.6 105.3,17.9 107.5,19.4 109.6,25.8 111.7,26.3 113.8,26.6 115.9,26.3 118.0,26.4",
+  "dotPos": {
+    "cx": "118.0",
+    "cy": "26.4"
+  },
+  "openBadge": "47 open",
+  "p95Val": "7m 28s",
+  "chartBeforeOutcomes": 4,
+  "modelsAfterOutcomes": 4,
+  "parsedData": {
+    "auto_resolve": {
+      "current_escalated": 251,
+      "current_rate": 0.0599250936329588,
+      "current_resolved": 16,
+      "daily": [
+        {
+          "date": "2026-03-17",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-18",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-19",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-20",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-21",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-22",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-23",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-24",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-25",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-26",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-27",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-28",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-29",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-30",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-03-31",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-01",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-02",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-03",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-04",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-05",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-06",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-07",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-08",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-09",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-10",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-11",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-12",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-13",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-14",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-15",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-16",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-17",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-18",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-19",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-20",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-21",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-22",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-23",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-24",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-25",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-26",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-27",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-28",
+          "escalated": 0,
+          "rate": null,
+          "resolved": 0
+        },
+        {
+          "date": "2026-04-29",
+          "escalated": 11,
+          "rate": 0.65625,
+          "resolved": 21
+        },
+        {
+          "date": "2026-04-30",
+          "escalated": 48,
+          "rate": 0.57522VMID_REDACTED31,
+          "resolved": 65
+        },
+        {
+          "date": "2026-05-01",
+          "escalated": 60,
+          "rate": 0.5275590551181102,
+          "resolved": 67
+        },
+        {
+          "date": "2026-05-02",
+          "escalated": 74,
+          "rate": 0.475VMID_REDACTED539,
+          "resolved": 67
+        },
+        {
+          "date": "2026-05-03",
+          "escalated": 94,
+          "rate": 0.4233VMID_REDACTED828,
+          "resolved": 69
+        },
+        {
+          "date": "2026-05-04",
+          "escalated": 105,
+          "rate": 0.4,
+          "resolved": 70
+        },
+        {
+          "date": "2026-05-05",
+          "escalated": 111,
+          "rate": 0.3867403314917127,
+          "resolved": 70
+        },
+        {
+          "date": "2026-05-06",
+          "escalated": 104,
+          "rate": 0.32903225806451614,
+          "resolved": 51
+        },
+        {
+          "date": "2026-05-07",
+          "escalated": 75,
+          "rate": 0.08536585365853659,
+          "resolved": 7
+        },
+        {
+          "date": "2026-05-08",
+          "escalated": 86,
+          "rate": 0.0652VMID_REDACTED4782,
+          "resolved": 6
+        },
+        {
+          "date": "2026-05-09",
+          "escalated": 126,
+          "rate": 0.05263VMID_REDACTED842,
+          "resolved": 7
+        },
+        {
+          "date": "2026-05-10",
+          "escalated": 240,
+          "rate": 0.066VMID_REDACTED17899,
+          "resolved": 17
+        },
+        {
+          "date": "2026-05-11",
+          "escalated": 251,
+          "rate": 0.0599250936329588,
+          "resolved": 16
+        }
+      ],
+      "delta_pp": -34,
+      "prior_rate": 0.4
+    },
+    "closed_loop": {
+      "delta_median_seconds": 114,
+      "delta_p95_seconds": 90,
+      "median_seconds": 279,
+      "n_closed": 220,
+      "n_open": 47,
+      "p95_seconds": 448,
+      "prior_median_seconds": 165,
+      "prior_n_closed": 162,
+      "prior_p95_seconds": 358
+    },
+    "window_days": 7
+  }
+}

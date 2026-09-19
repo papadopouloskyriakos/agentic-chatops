@@ -1,0 +1,50 @@
+# OMOIKANE-1057 — GPU BGE-M3 dense encoder for omoikane.
+#
+# Pattern: same shape as /srv/rerank — pytorch:cuda base, sentence-
+# transformers + FlagEmbedding installed at first boot, weights bind-
+# mounted from /srv/embed-bge-m3/weights/bge-m3.
+#
+# Why a sibling service to the rerank one instead of forcing through
+# ollama: ollama 0.22.1 on this host crashes on bge-m3 ("llama runner
+# terminated exit status 2"); the rerank-style direct FlagEmbedding
+# load works the same way it does for the DMZ-side CPU encoder
+# (omoikane-colbert-encoder:1.0.1) so the daemon-side API contract
+# stays identical — POST /encode → {"dense": [[...]], "dim": 1024}.
+#
+# Port 11437 sits next to /srv/rerank's 11436. DMZ→GPU connectivity
+# already proven through these (we verified :11434 + :11436 reachable
+# from notrf01dmz01).
+
+services:
+  embed-bge-m3:
+    image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+    container_name: embed-bge-m3
+    network_mode: host
+    environment:
+      - PORT=11437
+      - HF_HOME=/hf_cache
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - MODEL_PATH=/data/bge-m3
+      - USE_FP16=false
+      - MAX_LENGTH=512
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - /srv/embed-bge-m3/app:/app
+      - /srv/embed-bge-m3/hf_cache:/hf_cache
+      - /srv/embed-bge-m3/weights/bge-m3:/data/bge-m3:ro
+    working_dir: /app
+    command:
+      - bash
+      - -c
+      - >-
+        pip install --quiet 'transformers>=4.41,<4.47' FlagEmbedding==1.3.4 fastapi==0.115.6 'uvicorn[standard]==0.32.1' numpy==1.26.4 pydantic==2.10.4 &&
+        uvicorn server:app --host 0.0.0.0 --port 11437 --workers 1 --access-log
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

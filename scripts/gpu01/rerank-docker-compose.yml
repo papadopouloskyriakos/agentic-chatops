@@ -1,0 +1,24 @@
+services:
+  rerank:
+    image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+    container_name: rerank
+    network_mode: host
+    environment:
+      - PORT=11436
+      - HF_HOME=/hf_cache
+      - TRANSFORMERS_OFFLINE=0
+    volumes:
+      - /srv/rerank/app:/app
+      - /srv/rerank/hf_cache:/hf_cache
+    working_dir: /app
+    command: >
+      bash -c "pip install --quiet sentence-transformers==3.3.1 transformers==4.46.3 &&
+               python /app/server.py"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

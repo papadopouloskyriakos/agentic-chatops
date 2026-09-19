@@ -1,0 +1,143 @@
+{
+    "updatedAt": "2026-05-17T11:56:55.208Z",
+    "createdAt": "2026-05-17T11:56:55.208Z",
+    "id": "JtDNd1saO7PKM5fh",
+    "name": "NL - ChatDevOps CI Resume",
+    "description": null,
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+        {
+            "id": "ci-resume-webhook",
+            "name": "Pipeline Events Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                240,
+                300
+            ],
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "gitlab-pipeline-events",
+                "responseMode": "responseNode",
+                "options": {}
+            }
+        },
+        {
+            "id": "parse-pipeline",
+            "name": "Parse Pipeline Payload",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                460,
+                300
+            ],
+            "parameters": {
+                "jsCode": "// GitLab pipeline_events payload: {object_kind: 'pipeline', object_attributes: {id, ref, status, web_url}, ...}\nconst body = $('Pipeline Events Webhook').first().json.body || $('Pipeline Events Webhook').first().json;\nif (body.object_kind !== 'pipeline') {\n  return [{ json: { skip: true, reason: 'not a pipeline event' } }];\n}\nconst oa = body.object_attributes || {};\n// Only care about terminal statuses (success / failed / canceled)\nif (!['success', 'failed', 'canceled'].includes(oa.status)) {\n  return [{ json: { skip: true, reason: 'non-terminal status: ' + oa.status } }];\n}\nreturn [{ json: {\n  pipeline_id: oa.id,\n  branch: oa.ref,\n  status: oa.status,\n  pipeline_url: oa.web_url || '',\n  skip: false,\n} }];"
+            }
+        },
+        {
+            "id": "resume-worker",
+            "name": "Resume Worker",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                680,
+                300
+            ],
+            "parameters": {
+                "authentication": "privateKey",
+                "command": "={{ ($('Parse Pipeline Payload').first().json.skip) ? ('echo \"skip: ' + $('Parse Pipeline Payload').first().json.reason + '\"') : ('/home/app-user/gateway-state/bin/pipeline-resume.sh ' + $('Parse Pipeline Payload').first().json.pipeline_id + ' ' + $('Parse Pipeline Payload').first().json.branch + ' ' + $('Parse Pipeline Payload').first().json.status + ' ' + $('Parse Pipeline Payload').first().json.pipeline_url) }}",
+                "cwd": "/tmp"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            }
+        },
+        {
+            "id": "respond",
+            "name": "Respond",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                900,
+                300
+            ],
+            "parameters": {
+                "respondWith": "text",
+                "responseBody": "={{ $('Resume Worker').first().json.stdout || 'ok' }}"
+            }
+        }
+    ],
+    "connections": {
+        "Pipeline Events Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Pipeline Payload",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Pipeline Payload": {
+            "main": [
+                [
+                    {
+                        "node": "Resume Worker",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Resume Worker": {
+            "main": [
+                [
+                    {
+                        "node": "Respond",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "57bcbafd-11b6-4f28-bae8-8687a61010e4",
+    "activeVersionId": null,
+    "versionCounter": 1,
+    "triggerCount": 0,
+    "shared": [
+        {
+            "updatedAt": "2026-05-17T11:56:55.210Z",
+            "createdAt": "2026-05-17T11:56:55.210Z",
+            "role": "workflow:owner",
+            "workflowId": "JtDNd1saO7PKM5fh",
+            "projectId": "CLDM2Ezgw9101HuF",
+            "project": {
+                "updatedAt": "2025-01-28T17:38:17.181Z",
+                "createdAt": "2025-01-28T17:31:03.531Z",
+                "id": "CLDM2Ezgw9101HuF",
+                "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": null
+}

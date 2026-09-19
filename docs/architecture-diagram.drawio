@@ -1,0 +1,192 @@
+<mxfile host="app.diagrams.net" modified="2026-04-07T02:30:00.000Z" agent="claude-gateway" version="24.0.0">
+  <diagram id="refined-architecture" name="Platform Architecture">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ═══ TITLE ═══ -->
+        <mxCell id="header" value="&lt;b&gt;agentic-chatops — Platform Architecture&lt;/b&gt;&lt;br&gt;3 Subsystems • 17 Workflows • 47 Runner Nodes • 10 MCP Servers • 10 Sub-Agents • 98 Eval Scenarios" style="text;html=1;align=center;fontSize=15;fillColor=none;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="350" y="15" width="900" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ ALERT SOURCES ═══ -->
+        <mxCell id="group-alerts" value="Alert Ingestion Layer" style="swimlane;startSize=25;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="230" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="node-librenms" value="&lt;b&gt;LibreNMS&lt;/b&gt;&lt;br&gt;NL: 137 devices • GR: 19 devices&lt;br&gt;16 + 19 alert rules" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="group-alerts">
+          <mxGeometry x="15" y="40" width="200" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="node-prom" value="&lt;b&gt;Prometheus&lt;/b&gt;&lt;br&gt;Alertmanager (NL + GR)&lt;br&gt;K8s, etcd, node alerts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="group-alerts">
+          <mxGeometry x="15" y="120" width="200" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="node-crowdsec" value="&lt;b&gt;CrowdSec&lt;/b&gt;&lt;br&gt;6 hosts, 38+ scenarios&lt;br&gt;HTTP notifications" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="group-alerts">
+          <mxGeometry x="15" y="200" width="200" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="node-vuln" value="&lt;b&gt;Vulnerability Scanners&lt;/b&gt;&lt;br&gt;NL + GR (cross-site)&lt;br&gt;24 tools, daily cron" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="group-alerts">
+          <mxGeometry x="15" y="280" width="200" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="node-synology" value="&lt;b&gt;Synology DSM&lt;/b&gt;&lt;br&gt;iSCSI, SMART, I/O alerts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="group-alerts">
+          <mxGeometry x="15" y="355" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ n8n ORCHESTRATOR ═══ -->
+        <mxCell id="group-n8n" value="n8n Orchestrator (17 workflows, ~403 nodes)" style="swimlane;startSize=25;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="330" y="100" width="550" height="430" as="geometry" />
+        </mxCell>
+
+        <!-- Receivers row -->
+        <mxCell id="recv-row" value="&lt;b&gt;8 Webhook Receivers&lt;/b&gt; (NL+GR pairs: LibreNMS, Prometheus, CrowdSec, Security) + Synology + WAL Healer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="group-n8n">
+          <mxGeometry x="15" y="35" width="520" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Dedup -->
+        <mxCell id="node-dedup" value="&lt;b&gt;Dedup &amp; Burst Detection&lt;/b&gt;&lt;br&gt;Per-hostname dedup • Flap tracking • Recovery TTL (4h) • Burst: 3+ hosts in 5min → correlated-triage • Auto-escalation after 2+ flaps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6d0de;strokeColor=#996185;fontSize=10;" vertex="1" parent="group-n8n">
+          <mxGeometry x="15" y="85" width="520" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Runner -->
+        <mxCell id="node-runner" value="&lt;b&gt;Claude Gateway Runner (47 nodes)&lt;/b&gt;&lt;br&gt;&lt;br&gt;Cooldown → Slot Lock → &lt;b&gt;Query Knowledge&lt;/b&gt; (hybrid RRF search) → &lt;b&gt;Build Prompt&lt;/b&gt; (XML-tagged RAG + defensive prompt + tool profiles + ReAct + few-shot)&lt;br&gt;→ Launch Claude (nohup, JSONL) → Fire Poller → Wait → &lt;b&gt;Parse Response&lt;/b&gt; (confidence, tool counts, token tracking)&lt;br&gt;→ Validation Retry (2x) → &lt;b&gt;Prepare Result&lt;/b&gt; (16 PII patterns, credential scan, fact-check)&lt;br&gt;→ &lt;b&gt;Evaluator-Optimizer&lt;/b&gt; (Haiku screens if confidence &amp;lt; 0.6 OR cost &amp;gt; €3) → Post to Matrix" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="group-n8n">
+          <mxGeometry x="15" y="150" width="520" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Bridge -->
+        <mxCell id="node-bridge" value="&lt;b&gt;Matrix Bridge (73 nodes)&lt;/b&gt;&lt;br&gt;Polls /sync every 30s • Routes !commands • Reaction approval (👍/👎) • MSC3381 interactive polls • Session resume with context • Per-slot locking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="group-n8n">
+          <mxGeometry x="15" y="285" width="520" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Session End + Poller -->
+        <mxCell id="node-poller" value="&lt;b&gt;Progress Poller&lt;/b&gt;&lt;br&gt;JSONL stream → Matrix m.notice (30s)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999;fontSize=10;" vertex="1" parent="group-n8n">
+          <mxGeometry x="15" y="355" width="250" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="node-end" value="&lt;b&gt;Session End&lt;/b&gt;&lt;br&gt;Summarize → Archive → KB → Judge → YT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999;fontSize=10;" vertex="1" parent="group-n8n">
+          <mxGeometry x="280" y="355" width="255" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ TIER 1: OpenClaw ═══ -->
+        <mxCell id="group-t1" value="Tier 1 — OpenClaw (GPT-5.1)" style="swimlane;startSize=25;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="100" width="290" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="t1-desc" value="&lt;b&gt;Fast triage: 7-21 seconds&lt;/b&gt;&lt;br&gt;&lt;br&gt;15 native skills (infra, K8s, security, correlated)&lt;br&gt;Hybrid RAG: semantic + keyword (RRF) + query rewriting&lt;br&gt;Confidence gate: &amp;lt; 0.7 → escalate to Tier 2&lt;br&gt;Handles 80%+ of alerts without escalation" style="text;html=1;align=left;verticalAlign=top;spacingLeft=8;fontSize=10;" vertex="1" parent="group-t1">
+          <mxGeometry x="10" y="30" width="270" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="t1-guard" value="&lt;b&gt;Guardrails:&lt;/b&gt; safe-exec.sh (30+ blocks) • exec-approvals (36 patterns) • SOUL.md READ-ONLY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="group-t1">
+          <mxGeometry x="10" y="150" width="270" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="t1-badge-ops" value="ChatOps" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;fontStyle=1;size=8;" vertex="1" parent="group-t1">
+          <mxGeometry x="10" y="192" width="70" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t1-badge-sec" value="ChatSecOps" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;fontStyle=1;size=8;" vertex="1" parent="group-t1">
+          <mxGeometry x="90" y="192" width="80" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t1-badge-dev" value="ChatDevOps" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;fontStyle=1;size=8;" vertex="1" parent="group-t1">
+          <mxGeometry x="180" y="192" width="80" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ TIER 2: Claude Code ═══ -->
+        <mxCell id="group-t2" value="Tier 2 — Claude Code (Opus 4.6, 1M context)" style="swimlane;startSize=25;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="340" width="290" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="t2-desc" value="&lt;b&gt;Deep analysis: 2-10 minutes&lt;/b&gt;&lt;br&gt;&lt;br&gt;10 sub-agents (Anthropic Academy patterns):&lt;br&gt;triage-researcher • k8s-diagnostician&lt;br&gt;cisco-asa-specialist • storage-specialist&lt;br&gt;security-analyst • code-explorer&lt;br&gt;code-reviewer • ci-debugger • dependency-analyst" style="text;html=1;align=left;verticalAlign=top;spacingLeft=8;fontSize=10;" vertex="1" parent="group-t2">
+          <mxGeometry x="10" y="30" width="270" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="t2-guard" value="&lt;b&gt;Guardrails:&lt;/b&gt; PreToolUse hooks • 16 PII patterns • Evaluator-Optimizer&lt;br&gt;Tool call limit (75) • Cost ceiling (€5) • [POLL] before any change" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="group-t2">
+          <mxGeometry x="10" y="160" width="270" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ TIER 3: Human ═══ -->
+        <mxCell id="group-human" value="Tier 3 — Human (Matrix)" style="swimlane;startSize=25;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="100" width="230" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="human-desc" value="&lt;b&gt;Approval Interface&lt;/b&gt;&lt;br&gt;&lt;br&gt;Interactive [POLL] (MSC3381)&lt;br&gt;Reactions: 👍 approve / 👎 reject&lt;br&gt;Reply: edit parameters&lt;br&gt;Timeout: 15min remind, 30min pause&lt;br&gt;&lt;br&gt;&lt;b&gt;Commands:&lt;/b&gt; !session !issue !pipeline&lt;br&gt;!system !gateway !mode !help" style="text;html=1;align=left;verticalAlign=top;spacingLeft=8;fontSize=10;" vertex="1" parent="group-human">
+          <mxGeometry x="10" y="30" width="210" height="140" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ MCP SERVERS ═══ -->
+        <mxCell id="group-mcp" value="MCP Servers (10 servers, 153 tools)" style="swimlane;startSize=25;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1290" y="310" width="230" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="mcp-list" value="&lt;b&gt;Infrastructure:&lt;/b&gt;&lt;br&gt;• netbox — CMDB (310 devices)&lt;br&gt;• kubernetes — kubectl (30+ tools)&lt;br&gt;• proxmox — PVE API (15 tools)&lt;br&gt;&lt;br&gt;&lt;b&gt;Development:&lt;/b&gt;&lt;br&gt;• codegraph — code analysis (KuzuDB)&lt;br&gt;• gitlab — MR, pipelines, commits&lt;br&gt;• opentofu / tfmcp — IaC&lt;br&gt;&lt;br&gt;&lt;b&gt;Platform:&lt;/b&gt;&lt;br&gt;• n8n-mcp — workflow management&lt;br&gt;• youtrack — issue CRUD" style="text;html=1;align=left;spacingLeft=8;fontSize=9;verticalAlign=top;" vertex="1" parent="group-mcp">
+          <mxGeometry x="10" y="30" width="210" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ DATA STORES ═══ -->
+        <mxCell id="group-data" value="Persistence &amp; Observability" style="swimlane;startSize=25;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;rounded=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="590" width="1480" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="db-sqlite" value="&lt;b&gt;SQLite&lt;/b&gt; (gateway.db)&lt;br&gt;14 tables • Sessions&lt;br&gt;Knowledge • Judgments" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#fff;strokeColor=#666;fontSize=10;" vertex="1" parent="group-data">
+          <mxGeometry x="30" y="35" width="160" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="db-claudemd" value="&lt;b&gt;CLAUDE.md&lt;/b&gt;&lt;br&gt;51 files • hostname-routed&lt;br&gt;procedural knowledge" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#fff;strokeColor=#666;fontSize=10;" vertex="1" parent="group-data">
+          <mxGeometry x="230" y="35" width="170" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db-memories" value="&lt;b&gt;Memory Files&lt;/b&gt;&lt;br&gt;200+ feedback rules&lt;br&gt;synced across hosts" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#fff;strokeColor=#666;fontSize=10;" vertex="1" parent="group-data">
+          <mxGeometry x="440" y="35" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db-prom" value="&lt;b&gt;Prometheus + Grafana&lt;/b&gt;&lt;br&gt;5 dashboards • 63+ panels&lt;br&gt;9 metric exporters" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#fff;strokeColor=#666;fontSize=10;" vertex="1" parent="group-data">
+          <mxGeometry x="640" y="35" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="db-yt" value="&lt;b&gt;YouTrack&lt;/b&gt;&lt;br&gt;Incident tracking&lt;br&gt;Webhook + state sink" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#fff;strokeColor=#666;fontSize=10;" vertex="1" parent="group-data">
+          <mxGeometry x="850" y="35" width="150" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="db-eval" value="&lt;b&gt;Evaluation System&lt;/b&gt; (11/11 dimensions A+)&lt;br&gt;98 scenarios (3-set model) • LLM-as-Judge (Haiku/Opus) • Prompt Scorecard (19×6)&lt;br&gt;Eval Flywheel (monthly) • CI gate • Judge calibration • Trajectory scoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="group-data">
+          <mxGeometry x="1040" y="40" width="410" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ CONNECTIONS ═══ -->
+
+        <!-- Alerts → n8n -->
+        <mxCell id="edge-alerts-n8n" value="webhooks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#6c8ebf;fontSize=9;fontColor=#6c8ebf;" edge="1" parent="1" source="group-alerts" target="recv-row">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Dedup → Tier 1 -->
+        <mxCell id="edge-dedup-t1" value="triage instruction" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#d6b656;fontSize=9;fontColor=#d6b656;" edge="1" parent="1" source="node-dedup" target="t1-desc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tier 1 → Runner (escalation) -->
+        <mxCell id="edge-t1-runner" value="escalate (conf &lt; 0.7)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#82b366;fontSize=9;fontColor=#82b366;" edge="1" parent="1" source="t1-guard" target="node-runner">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="920" y="345" />
+              <mxPoint x="920" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Runner → Tier 2 -->
+        <mxCell id="edge-runner-t2" value="SSH launch (nohup)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#82b366;fontSize=9;fontColor=#82b366;" edge="1" parent="1" source="node-runner" target="t2-desc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Bridge ↔ Human -->
+        <mxCell id="edge-bridge-human" value="Matrix /sync" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#6c8ebf;fontSize=9;fontColor=#6c8ebf;" edge="1" parent="1" source="node-bridge" target="human-desc">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="413" />
+              <mxPoint x="900" y="80" />
+              <mxPoint x="1395" y="80" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 2 → MCP -->
+        <mxCell id="edge-t2-mcp" value="tool calls" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#9673a6;dashed=1;fontSize=9;fontColor=#9673a6;" edge="1" parent="1" source="t2-guard" target="mcp-list">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- n8n → Data stores -->
+        <mxCell id="edge-n8n-data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#999;dashed=1;" edge="1" parent="1" source="node-end" target="db-sqlite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ KNOWLEDGE SOURCES (bottom strip) ═══ -->
+        <mxCell id="ks-strip" value="&lt;b&gt;Tri-Source Audited:&lt;/b&gt;  ① Agentic Design Patterns (Gulli, 21/21 A+)  •  ② Claude Certified Architect (Anthropic)  •  ③ Industry References (Anthropic + OpenAI + LangChain + Microsoft)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="1480" height="35" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

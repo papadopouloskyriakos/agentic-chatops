@@ -1,0 +1,332 @@
+[
+  {
+    "id": 4,
+    "query": "How do I resolve: Service up/down on nl-pve01 at site nl? Root cause: pve01 oversubscribed: 80% RAM (75/94GB), 7 VMs (40GB) + 57 LXC on single host. 1GB ZFS swapfile was 100% full and deadlocked. Load spiked to 229 causing cascading service check failures, apiserver cra",
+    "ground_truth": "Removed dangerous ZFS swapfile (orphaned, clears on reboot). Started iot01 VM. Closed 9 cascading alerts. Root fix: servarr LXC consolidation (IFRNLLEI01PRD-202) or K8s worker migration off pve01.",
+    "hostname": "nl-pve01",
+    "alert_rule": "Service up/down",
+    "confidence": 0.95,
+    "issue_id": "IFRNLLEI01PRD-255",
+    "tags": "pve01,oversubscription,swap,cascade"
+  },
+  {
+    "id": 5,
+    "query": "How do I resolve: Devices up/down on nlcl01iot01 at site nl? Root cause: iot01 is VMID 666 (non-standard) on pve01. Stopped by OOM pressure during pve01 overload. Pacemaker cluster (3 nodes: iot01/iot02/iotarb01) correctly fenced iot01 and failed over g_iot_stack (HA, Mosq",
+    "ground_truth": "Started VM via qm start 666. Cluster rejoined: 3/3 nodes online, 12/12 resources on iot02. Do NOT failback automatically \u2014 leave on current active node. SSH: ssh -i ~/.ssh/one_key root@nlcl01iot01",
+    "hostname": "nlcl01iot01",
+    "alert_rule": "Devices up/down",
+    "confidence": 0.95,
+    "issue_id": "IFRNLLEI01PRD-256",
+    "tags": "iot,pacemaker,failover,vmid666"
+  },
+  {
+    "id": 6,
+    "query": "How do I resolve: KubePodCrashLooping on nlk8s-ctrl01 at site nl? Root cause: apiserver-ctrl01 crash looping (498 restarts) is a symptom of pve01 memory pressure. ctrl01 VM (8GB) runs on pve01 which was at 80% RAM + swap maxed. etcd WAL fsync latency causes probe failures.",
+    "ground_truth": "Self-recovered when pve01 load dropped. All 3 apiservers Running and Ready, all API services Available. Long-term fix: migrate ctrl01 off pve01.",
+    "hostname": "nlk8s-ctrl01",
+    "alert_rule": "KubePodCrashLooping",
+    "confidence": 0.9,
+    "issue_id": "IFRNLLEI01PRD-257",
+    "tags": "apiserver,pve01,ctrl01,etcd"
+  },
+  {
+    "id": 7,
+    "query": "How do I resolve: PodCrashLoopBackOff on my-awx-web at site gr? Root cause: AWX Postgres PVC (postgres-15-my-awx-postgres-15-0) was deleted during iSCSI I/O errors from ZFS TXG flush storms on gr-pve02. Postgres crashed with SIGSEGV (exit 139). PV retained data (Retain po",
+    "ground_truth": "Fix: cleared PV claimRef (Released\u2192Available), recreated PVC with volumeName pointing to existing PV, deleted pod. Also fixed postgresql.conf listen_addresses (was commented out, entrypoint used -h empty), removed stale postmaster.pid. All AWX pods healthy.",
+    "hostname": "my-awx-web",
+    "alert_rule": "PodCrashLoopBackOff",
+    "confidence": 0.95,
+    "issue_id": "IFRGRSKG01PRD-115",
+    "tags": "awx,postgres,pvc,iscsi,zfs"
+  },
+  {
+    "id": 8,
+    "query": "How do I resolve: PrometheusTSDBCompactionsFailing on prometheus-monitoring-kube-prometheus-prometheus-0 at site gr? Root cause: GR iSCSI server (gr-pve02) ZFS ssd-pool: 19 zvols on single RAID1 SSD pair, sync=disabled, 61% fragmentation, logbias=throughput. TXG flushes every 5s dump batched writes, overwhelming I/O. Affect",
+    "ground_truth": "ZFS tunables applied: txg_timeout=2 (was 5), dirty_data_max=2GB (was 3.36GB), async_write_max_active=5 (was 10). Persisted in /etc/modprobe.d/zfs-tuning.conf. SeaweedFS migration to sdc planned (IFRGRSKG01PRD-122) to reduce contention.",
+    "hostname": "prometheus-monitoring-kube-prometheus-prometheus-0",
+    "alert_rule": "PrometheusTSDBCompactionsFailing",
+    "confidence": 0.9,
+    "issue_id": "IFRGRSKG01PRD-113",
+    "tags": "iscsi,zfs,txg,prometheus,wal,tuning"
+  },
+  {
+    "id": 9,
+    "query": "How do I resolve: Service up/down on nl-pve01 at site nl? Root cause: PVE swap audit: pve01 had 1GB swapfile on ZFS (deadlock risk, Proxmox warns against). pve03/gr-pve01 had no swap on ZFS (correct). gr-pve02 had 8GB LVM swap on slow SATA but inactive. Recommen",
+    "ground_truth": "pve01: removed ZFS swapfile (deadlocked on swapoff, clears on reboot). pve02: swappiness\u219210. gr-pve01: 8GB swapfile on Samsung ext4 NVMe + swappiness=10. gr-pve02: deactivated SATA swap. Proxmox best practice: swap on physical partition outside ZFS, max 8GB, swappiness=10.",
+    "hostname": "nl-pve01",
+    "alert_rule": "Service up/down",
+    "confidence": 0.95,
+    "issue_id": "IFRNLLEI01PRD-255",
+    "tags": "swap,zfs,proxmox,audit"
+  },
+  {
+    "id": 10,
+    "query": "How do I resolve: iSCSI I/O contention on gr-pve02 at site gr? Root cause: SeaweedFS 2x500GB volume zvols on ssd-pool were the heaviest writers, causing TXG flush storms that cascaded into I/O errors for Prometheus, AWX, Loki.",
+    "ground_truth": "Migrated SeaweedFS volumes from iSCSI (ZFS ssd-pool) to NFS on sdc (7.3TB ext4 HDD). Created NFS export + static NFS PVs. Fresh volumes (000 replication). Cleaned 4 old zvols+targets. ssd-pool: 19\u219215 targets, 56\u219250% cap. Combined with TXG tunables (txg_timeout=2, dirty_data_max=2GB, async_write_max_active=5).",
+    "hostname": "gr-pve02",
+    "alert_rule": "iSCSI I/O contention",
+    "confidence": 0.95,
+    "issue_id": "IFRGRSKG01PRD-122",
+    "tags": "seaweedfs,iscsi,nfs,migration,sdc"
+  },
+  {
+    "id": 17,
+    "query": "How do I resolve: Service up/down on nl-fw01 at site nl? Root cause: EEM watchdog timer auto-reload",
+    "ground_truth": "Weekly EEM watchdog reboot (604800s timer). Total NL outage for ~5-10 min. All devices recover automatically. No action required. Cascading alerts across all NL hosts are expected.",
+    "hostname": "nl-fw01",
+    "alert_rule": "Service up/down",
+    "confidence": 0.95,
+    "issue_id": "SCHEDULED-ASA-NL-001",
+    "tags": "scheduled,maintenance,asa,reboot,cascading,eem,watchdog"
+  },
+  {
+    "id": 18,
+    "query": "How do I resolve: Devices up/down on nl-fw01 at site nl? Root cause: EEM watchdog timer auto-reload",
+    "ground_truth": "Weekly EEM watchdog reboot. Cascading device-down alerts expected across all NL hosts. Auto-recovers within 5-10 minutes. Do not escalate during scheduled reboot window.",
+    "hostname": "nl-fw01",
+    "alert_rule": "Devices up/down",
+    "confidence": 0.95,
+    "issue_id": "SCHEDULED-ASA-NL-002",
+    "tags": "scheduled,maintenance,asa,reboot,cascading"
+  },
+  {
+    "id": 19,
+    "query": "How do I resolve: Service up/down on gr-fw01 at site gr? Root cause: EEM watchdog timer auto-reload",
+    "ground_truth": "EEM watchdog reboot (590400s timer, ~6d20h cycle). GR total outage ~5-10 min + NL VPN tunnel drop. Auto-recovers. GR and NL devices may show cascading alerts.",
+    "hostname": "gr-fw01",
+    "alert_rule": "Service up/down",
+    "confidence": 0.95,
+    "issue_id": "SCHEDULED-ASA-GR-001",
+    "tags": "scheduled,maintenance,asa,reboot,cascading,eem,watchdog,vpn"
+  },
+  {
+    "id": 35,
+    "query": "How do I resolve: Service up/down on nl-fw01 at site nl? Root cause: Freedom ISP PPPoE session dropped. ASA outside_freedom (Po1.6 VLAN 6) up/up but IP unassigned. PPP virtual interface id=1 deleted and pending reuse. Genexis XGS-PON ONT (PoE-powered on nl-sw01 Gi1",
+    "ground_truth": "xs4all WAN carries all traffic automatically (full tunnel parity configured 2026-04-08). Check: show vpdn pppinterface (PPP id=1 status), show interface outside_freedom (IP assigned?). Physical fix: power-cycle Genexis ONT on nl-sw01 Gi1/0/36 or contact Freedom ISP. QoS auto-applied to tenant rooms via freedom-qos-toggle.sh cron.",
+    "hostname": "nl-fw01",
+    "alert_rule": "Service up/down",
+    "confidence": 0.98,
+    "issue_id": "IFRNLLEI01PRD-381",
+    "tags": "freedom,pppoe,vpn,xs4all,ont,genexis,tunnel,isp-outage,wan-failover"
+  },
+  {
+    "id": 36,
+    "query": "How do I resolve: Devices up/down on gr-pve01 at site gr? Root cause: GR devices showing down from NL LibreNMS perspective. Root cause: NL Freedom ISP PPPoE failure causing S2S VPN tunnel collapse to GR. All GR hosts on 192.168.2.x unreachable. Correlated with Service u",
+    "ground_truth": "Check NL ASA Freedom PPPoE status first: show vpdn pppinterface. If PPP id=1 is deleted/pending, this is a Freedom ISP outage, not a GR problem. xs4all WAN has full tunnel coverage. If both WANs down, GR is genuinely isolated \u2014 check GR ASA independently via LTE backup.",
+    "hostname": "gr-pve01",
+    "alert_rule": "Devices up/down",
+    "confidence": 0.95,
+    "issue_id": "IFRNLLEI01PRD-381",
+    "tags": "freedom,vpn,gr-unreachable,correlated-burst,false-positive,cross-site"
+  },
+  {
+    "id": 37,
+    "query": "How do I resolve: Service up/down on nl-pve01 at site nl? Root cause: Multiple NL hosts showing Service up/down during Freedom ISP outage. These are LibreNMS service checks that failed during the VPN tunnel renegotiation period. Most auto-recover within 5-15 minutes onc",
+    "ground_truth": "Monitor and wait 15 minutes after Freedom drops. xs4all tunnels auto-establish for all GR traffic. Check: show vpn-sessiondb l2l on NL ASA for active tunnel count and child SAs. If child SAs < 5 after 15 min, investigate crypto-map or NAT exemption issues on xs4all map.",
+    "hostname": "nl-pve01",
+    "alert_rule": "Service up/down",
+    "confidence": 0.9,
+    "issue_id": "IFRNLLEI01PRD-381",
+    "tags": "freedom,xs4all,service-flap,transient,auto-recovery,tunnel-renegotiation"
+  },
+  {
+    "id": 44,
+    "query": "How do I resolve: BGP peer down \u2014 Freedom VTI to GR (10.255.200.X) on nl-fw01 at site nl? Root cause: Freedom VTI tunnel (Tunnel4) is down. Check: show interface Tunnel4, show vpn-sessiondb l2l, show track 1. If Freedom ISP down, SLA track shows DOWN and default route auto-switches to xs4all.",
+    "ground_truth": "BGP auto-failover to FRR transit (LP 100) in ~30s. Verify: show bgp ipv4 unicast summary, show route bgp. After recovery: clear conn address for corosync (10.0.X.X/29) and NFS (10.0.188.X/27) subnets on BOTH ASAs.",
+    "hostname": "nl-fw01",
+    "alert_rule": "BGP peer down \u2014 Freedom VTI to GR (10.255.200.X)",
+    "confidence": 0.95,
+    "issue_id": "",
+    "tags": "bgp,vti,freedom,failover,tunnel"
+  },
+  {
+    "id": 45,
+    "query": "How do I resolve: xs4all VTI tunnel UP but zero ESP traffic (Bytes Rx: 0) on nl-fw01 at site nl? Root cause: EXPECTED BEHAVIOR. ASA tunnel source interface does NOT override routing table. VPN peer host routes (metric 1) via outside_freedom force ALL ESP out Freedom. Freedom ISP drops xs4all-sourced ESP (BCP",
+    "ground_truth": "No action needed. xs4all activates only when Freedom ISP goes completely down. Verify: show crypto ipsec sa | include interface|pkts dec \u2014 Freedom tunnels healthy, xs4all encaps>0 decaps=0 is normal.",
+    "hostname": "nl-fw01",
+    "alert_rule": "xs4all VTI tunnel UP but zero ESP traffic (Bytes Rx: 0)",
+    "confidence": 1.0,
+    "issue_id": "",
+    "tags": "bgp,vti,xs4all,dormancy,expected-behavior"
+  },
+  {
+    "id": 46,
+    "query": "How do I resolve: Cross-site corosync/NFS blackhole after BGP route change on nl-fw01 at site nl? Root cause: Stale ASA connection table entries from old forwarding path. BGP route changed but existing stateful flows still use cached path.",
+    "ground_truth": "Clear connections on BOTH ASAs: clear conn address 10.0.X.X netmask 255.255.255.248 (NL corosync), clear conn address 10.0.X.X netmask 255.255.255.248 (GR corosync), clear conn address 10.0.X.X netmask 255.255.255.224 (NL NFS), clear conn address 10.0.188.X netmask 255.255.255.224 (GR NFS). Verify: pvecm status shows 5/5 quorate.",
+    "hostname": "nl-fw01",
+    "alert_rule": "Cross-site corosync/NFS blackhole after BGP route change",
+    "confidence": 0.95,
+    "issue_id": "",
+    "tags": "bgp,stale-connections,corosync,nfs,failover"
+  },
+  {
+    "id": 47,
+    "query": "How do I resolve: BGP peer down \u2014 Freedom VTI to NL (10.255.200.X) on gr-fw01 at site gr? Root cause: NL ASA Freedom VTI tunnel is down. GR ASA sees BGP session drop. NL Tunnel4 may be admin-down, IKE failed, or Freedom ISP is down.",
+    "ground_truth": "GR auto-failovers to FRR transit (LP 100) via VPS in ~30s. Verify: show bgp ipv4 unicast summary, show route bgp. Check NL side: show interface Tunnel4, show track 1. After recovery: clear conn address for corosync/NFS subnets.",
+    "hostname": "gr-fw01",
+    "alert_rule": "BGP peer down \u2014 Freedom VTI to NL (10.255.200.X)",
+    "confidence": 0.95,
+    "issue_id": "",
+    "tags": "bgp,vti,freedom,failover,tunnel"
+  },
+  {
+    "id": 48,
+    "query": "How do I resolve: Freedom ISP PPPoE down \u2014 full BGP failover on nl-fw01 at site nl? Root cause: Freedom PPPoE died. SLA track 1 detects in ~15s. Default route switches to xs4all. Freedom VTI BGP drops (~30s). xs4all tunnels activate.",
+    "ground_truth": "Automatic failover. Verify: 1) show track 1 (DOWN), 2) show route 0.0.0.0 (xs4all at metric 10), 3) show bgp summary (xs4all VTI peers establish), 4) show crypto ipsec sa (xs4all decaps increasing). QoS toggle auto-applies. Physical fix: power-cycle ONT on nl-sw01 Gi1/0/36.",
+    "hostname": "nl-fw01",
+    "alert_rule": "Freedom ISP PPPoE down \u2014 full BGP failover",
+    "confidence": 0.95,
+    "issue_id": "",
+    "tags": "bgp,freedom,pppoe,failover,xs4all,sla"
+  },
+  {
+    "id": 101,
+    "query": "Which services are affected by BOTH the NL Freedom ISP outage failure mode AND the iBGP full mesh fix that was deployed on 2026-04-13?",
+    "ground_truth": "Cross-site routing services. The Freedom ISP outage pattern (IFRNLLEI01PRD-381, 2026-04-08) forces traffic onto xs4all, which requires working iBGP next-hop resolution to every site subnet. The iBGP full mesh fix (2026-04-13, ibgp_full_mesh_fix_20260413) added next-hop-self force + BFD + table-map SET_SRC so ASAs resolve VPS-transit next-hops correctly during Freedom failover. Affected services: cross-site corosync (both sites), NFS iSCSI (GR), Matrix bridge traffic (NL\u2192GR), n8n\u2192OpenClaw bridge, webhook-driven triage pipeline.",
+    "hostname": "nl-fw01",
+    "alert_rule": "multi-hop-cross-reference",
+    "confidence": 0.9,
+    "issue_id": "",
+    "tags": "hard-eval,multi-hop,cross-corpus,bgp,freedom,failover"
+  },
+  {
+    "id": 102,
+    "query": "What chaos experiments validated the same failure mode as the 2026-04-11 VTI BGP outage incident?",
+    "ground_truth": "Tunnel-kill chaos experiments under the VTI tunnel chaos category. The 2026-04-11 outage (IFRNLLEI01PRD-VTI-BGP-OUTAGE) had root cause IKE SA race condition on Freedom tunnels. Chaos experiments that tested the same failure mode: wan-failover/tunnel-nl-gr-freedom, wan-failover/tunnel-nl-no-freedom, wan-failover/tunnel-nl-ch-freedom (all in experiments/catalog.yaml). Recovery mechanism under test: vti-freedom-recovery.sh cron (*/3) + BGP convergence to FRR transit (LP 100).",
+    "hostname": "nl-fw01",
+    "alert_rule": "multi-hop-chaos-incident-correlation",
+    "confidence": 0.9,
+    "issue_id": "",
+    "tags": "hard-eval,multi-hop,cross-corpus,vti,chaos,bgp"
+  },
+  {
+    "id": 103,
+    "query": "Which hosts both had memory pressure incidents AND sit on the NL PVE storage path that serves iSCSI to K8s workers?",
+    "ground_truth": "nl-pve01. It hosts n8n LXC, experienced the pve01-memory-pressure-apiserver incident (IFRNLLEI01PRD-566/567 2026-04-15), and serves as one of the PVE cluster nodes. GR iSCSI is on gr-pve02 (separate site). For NL K8s iSCSI paths, nl-pve01 is critical because it runs the n8n LXC that pve02 storage events also route through. Other memory-pressure candidates (nl-pve03) do not carry iSCSI.",
+    "hostname": "nl-pve01",
+    "alert_rule": "multi-hop-host-intersection",
+    "confidence": 0.85,
+    "issue_id": "",
+    "tags": "hard-eval,multi-hop,memory-pressure,iscsi,pve,intersection"
+  },
+  {
+    "id": 104,
+    "query": "What infrastructure incidents occurred in the last 7 days on the NL site?",
+    "ground_truth": "Temporal query requires created_at >= now()-7d AND site=nl. Expected answer form: list issue_id / summary / created_at for NL-site incidents in the past week. The retriever must use time-aware filtering (currently missing) \u2014 without it, all-time incidents are returned and the answer is noisy. Pass criterion: answer mentions only incidents created after {{ now_minus_7d }} and tagged NL/nl.",
+    "hostname": "",
+    "alert_rule": "temporal-last-7-days",
+    "confidence": 0.7,
+    "issue_id": "",
+    "tags": "hard-eval,temporal,last-7-days,nl-site"
+  },
+  {
+    "id": 105,
+    "query": "Which chaos experiments were run between 2026-04-11 and 2026-04-14 (inclusive)?",
+    "ground_truth": "Temporal window query. Expected rows from chaos_experiments where started_at BETWEEN 2026-04-11 AND 2026-04-14 23:59:59. The correct answer format is a count plus a list of experiment_id + verdict + started_at. Pass criterion: only experiments from this window appear; no earlier/later ones leak in.",
+    "hostname": "",
+    "alert_rule": "temporal-date-range",
+    "confidence": 0.7,
+    "issue_id": "",
+    "tags": "hard-eval,temporal,date-range,chaos"
+  },
+  {
+    "id": 106,
+    "query": "Show me the oldest still-unresolved infrastructure lesson that references the ASA firewall.",
+    "ground_truth": "Temporal + filter query. Expected answer: traverse lessons_learned / incident_knowledge where text mentions ASA and status != resolved, order by created_at ASC, return the first entry. Failure mode for current pipeline: returns most-similar ASA mention rather than oldest-unresolved.",
+    "hostname": "",
+    "alert_rule": "temporal-oldest-unresolved",
+    "confidence": 0.7,
+    "issue_id": "",
+    "tags": "hard-eval,temporal,oldest,lesson,asa"
+  },
+  {
+    "id": 107,
+    "query": "Which ASAs in the fleet do NOT have the EEM weekly reboot watchdog applet currently active?",
+    "ground_truth": "Both ASAs. nl-fw01 and gr-fw01 had the EEM watchdog disabled on 2026-04-10 after it caused VTI tunnel instability (asa_reboot_suppression memory). asa-reboot-watch.sh cron is commented out. Correct answer must mention BOTH ASAs are now without the applet \u2014 a common wrong answer is to cite the historical state (both had it) or to name one of the two.",
+    "hostname": "",
+    "alert_rule": "negation-which-lack",
+    "confidence": 0.9,
+    "issue_id": "",
+    "tags": "hard-eval,negation,eem,asa-reboot,disabled"
+  },
+  {
+    "id": 108,
+    "query": "Which chaos experiments in the catalog do NOT involve tunnel kills?",
+    "ground_truth": "DMZ container experiments (dmz-nl-all-containers, dmz-gr-all-containers, dmz-nl-single-portfolio) and latency/packet-loss degradation experiments (wan-latency-freedom-200ms, wan-packetloss-freedom-10pct). Tunnel-kill experiments are in the wan-failover category; non-tunnel experiments live under dmz-failover and wan-degradation. Pass criterion: answer enumerates the non-tunnel categories without listing tunnel-kill experiments.",
+    "hostname": "",
+    "alert_rule": "negation-not-tunnel",
+    "confidence": 0.85,
+    "issue_id": "",
+    "tags": "hard-eval,negation,chaos,catalog,dmz"
+  },
+  {
+    "id": 109,
+    "query": "Which public-facing IPs are NOT whitelisted in the CrowdSec VPS whitelist?",
+    "ground_truth": "Any external / third-party IP is not whitelisted by design. The VPS whitelist (/etc/crowdsec/parsers/s02-enrich/whitelist-vps.yaml) includes only NL + GR ASA peer IPs + site loopbacks used for IPsec. The 5 public-facing scanner-visible IPs (203.0.113.X, 203.0.113.X, 203.0.113.X, 198.51.100.X, 198.51.100.X) ARE in the whitelist because they are part of the VPN mesh. Any IP outside these is NOT whitelisted \u2014 which is the intended default-deny.",
+    "hostname": "",
+    "alert_rule": "negation-not-whitelisted",
+    "confidence": 0.8,
+    "issue_id": "",
+    "tags": "hard-eval,negation,crowdsec,whitelist,security"
+  },
+  {
+    "id": 110,
+    "query": "What Prometheus metrics emitted by the RAG pipeline should be monitored to detect retrieval-quality regressions?",
+    "ground_truth": "Self-referential / meta query. The pipeline emits: kb_retrieval_latency_seconds{quantile}, kb_retrieval_latency_mean_seconds, kb_embedded_rows{table}, kb_embedded_rows_total, kb_migration_trigger_distance, kb_rerank_service_up, kb_rerank_probe_latency_ms, kb_hard_eval_hit_rate, kb_hard_eval_last_run_timestamp_seconds, kb_qwen_json_failure_total, kb_openclaw_sync_*, kb_content_refresh_age_seconds. Pass criterion: answer cites kb_retrieval_latency_seconds + kb_hard_eval_hit_rate + kb_migration_trigger_distance at minimum.",
+    "hostname": "",
+    "alert_rule": "meta-monitoring-metrics",
+    "confidence": 0.95,
+    "issue_id": "",
+    "tags": "hard-eval,meta,self-referential,prometheus,rag-observability"
+  },
+  {
+    "id": 111,
+    "query": "Which components of the agentic pipeline are covered by the mempalace integration test, and which components are NOT?",
+    "ground_truth": "Meta query + implicit negation. Covered (22 tests in test-mempalace-integration.sh): schema validation (session_transcripts, agent_diary), transcript archival, temporal validity (valid_until invalidation), agent diary writes/reads/XML injection, Stop hook + PreCompact hook, script syntax, RRF keyword regression. NOT covered: cross-encoder rerank (bge-reranker service), RAG Fusion multi-query, G5 KG traversal (has its own test-kg-traverse.sh), HyDE, G4 doc-chain map-reduce.",
+    "hostname": "",
+    "alert_rule": "meta-test-coverage",
+    "confidence": 0.9,
+    "issue_id": "",
+    "tags": "hard-eval,meta,negation,test-coverage,mempalace"
+  },
+  {
+    "id": 112,
+    "query": "How does the unified-guard PreToolUse hook decide what Bash commands to block, and what's the difference between BLOCKED_PATTERNS and BLOCKED_CMD_WORDS?",
+    "ground_truth": "Self-referential query about the hook logic. BLOCKED_PATTERNS (substring match via grep -qF) is for multi-token phrases already specific enough that prose can't falsely match (e.g. 'rm -rf /', 'kubectl delete namespace'). BLOCKED_CMD_WORDS (word-boundary match via grep -qE '(^|[;&|])\\s*(sudo\\s+)?WORD(\\s|$|--)') is for single-word commands like passwd/useradd/reboot/halt that would false-positive in commit messages or filenames if substring-matched. Also checks EXFIL_PATTERNS (reverse shells) and INJECTION_PATTERNS (prompt injection) as separate ladder stages.",
+    "hostname": "",
+    "alert_rule": "meta-hook-internals",
+    "confidence": 0.95,
+    "issue_id": "",
+    "tags": "hard-eval,meta,self-referential,unified-guard,security-hook"
+  },
+  {
+    "id": 113,
+    "query": "Combining the compiled wiki and incident history, what is the current recommended remediation when a BGP next-hop is unreachable on a VPS?",
+    "ground_truth": "Cross-corpus: wiki + incident corroboration. Wiki (vti_bgp_outage_20260411 + ibgp_full_mesh_fix_20260413) says: ensure VPS FRR update-source uses the VTI /31 address (not loopback) for NL RR peers so the ASA can resolve the next-hop on a connected Tunnel interface. Incident IFRNLLEI01PRD-VTI-BGP-OUTAGE adds: if Freedom tunnel bounces, the IKE SA race condition can strand the BGP session \u2014 use vti-freedom-recovery.sh cron (*/3) for auto-heal, plus `maximum-paths ibgp 1` on VPS to prevent cross-tunnel ECMP asymmetric routing. Retrieval must surface both the wiki fix and the cron runbook entry.",
+    "hostname": "",
+    "alert_rule": "cross-corpus-bgp-remediation",
+    "confidence": 0.85,
+    "issue_id": "",
+    "tags": "hard-eval,cross-corpus,wiki,incident,bgp,vps,next-hop"
+  },
+  {
+    "id": 114,
+    "query": "Do session transcripts corroborate the lesson that ASA crypto-map entries must be delete-then-recreate rather than in-place updated?",
+    "ground_truth": "Cross-corpus: lesson + transcript corroboration. The lesson (feedback_asa_cryptomap_delete_recreate memory) says in-place peer changes leave stale IKEv2 TS matching tables. Corroborating session transcripts: 2026-04-09 dual-wan-vpn-parity work (chunks referencing 'DELETE then RE-CREATE' during the 46 crypto-map setup) and the NAT/PAT audit session. Pass criterion: answer must cite BOTH the lesson AND at least one transcript as evidence.",
+    "hostname": "",
+    "alert_rule": "cross-corpus-lesson-transcript",
+    "confidence": 0.85,
+    "issue_id": "",
+    "tags": "hard-eval,cross-corpus,lesson,transcript,asa,cryptomap"
+  },
+  {
+    "id": 115,
+    "query": "According to both the wiki and chaos baseline data, what is the expected recovery time for a Freedom tunnel kill on NL<->GR?",
+    "ground_truth": "Cross-corpus: wiki (chaos_baseline_impl_20260412) + chaos_experiments table. Wiki documents convergence ~37s (BGP-layer) and recovery_seconds ~136s (wall-clock incl. stateful flow re-establishment). Chaos baselines confirm median recovery 120-180s across 18 baseline experiments, with outliers on cold-start xs4all tunnels. Pass criterion: answer cites both the wiki figure and at least one chaos experiment's recovery_seconds.",
+    "hostname": "",
+    "alert_rule": "cross-corpus-recovery-time",
+    "confidence": 0.85,
+    "issue_id": "",
+    "tags": "hard-eval,cross-corpus,wiki,chaos,recovery-time,vti"
+  }
+]

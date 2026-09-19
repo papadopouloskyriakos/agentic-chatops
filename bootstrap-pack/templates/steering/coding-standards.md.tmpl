@@ -1,0 +1,37 @@
+# Steering — Coding standards (cross-cutting, agent-wide)
+
+Project-specific overrides to general language conventions. Loaded into every Claude session for this repo.
+
+## Format
+
+- Indent: <2 spaces | 4 spaces | tabs>
+- Line length: <80 | 100 | 120>
+- Trailing newline at EOF: <yes | no>
+
+## Naming
+
+- File names: <snake_case | kebab-case | camelCase>
+- Types: <PascalCase>
+- Variables: <camelCase | snake_case>
+- Constants: <SCREAMING_SNAKE_CASE>
+
+## Imports
+
+- <Group order: stdlib → third-party → internal | alphabetical | other>
+- <No wildcards | wildcards-allowed-in-tests>
+
+## Error handling
+
+- <Errors must be wrapped with context | bare returns OK>
+- <Panics permitted in <listed_cases> only>
+
+## Logging
+
+- <Structured (slog/zap) only | printf OK in scripts>
+- <No PII in logs (see security-baseline.md for the regex list)>
+
+## Testing
+
+- <Table-driven preferred over single-case tests>
+- <Test files live alongside source (foo_test.go)>
+- <Coverage threshold: NN% per package>

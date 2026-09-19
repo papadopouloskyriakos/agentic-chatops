@@ -1,0 +1,8 @@
+{
+  "claude-gateway": {
+    "cwd": "/app/claude-gateway",
+    "room": "!AOMuEtXGyzGFLgObKN:matrix.example.net",
+    "youtrack_prefix": "IFRNLLEI01PRD",
+    "lock": "/home/app-user/gateway-state/locks/claude-gateway.lock"
+  }
+}

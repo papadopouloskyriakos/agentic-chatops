@@ -1,0 +1,219 @@
+{
+  "run_at": "2026-04-18-2206",
+  "duration_seconds": 157,
+  "total": 23,
+  "pass": 23,
+  "fail": 0,
+  "warn": 0,
+  "skip": 0,
+  "pass_rate_pct": 100.0,
+  "tests": [
+    {
+      "id": "T1",
+      "category": "retrieval",
+      "name": "rerank /health",
+      "status": "PASS",
+      "before": "service-absent-pre-session",
+      "after": "ok",
+      "yt": "597"
+    },
+    {
+      "id": "T1",
+      "category": "retrieval",
+      "name": "rerank /rerank returns scores",
+      "status": "PASS",
+      "before": "none",
+      "after": "scores-returned",
+      "yt": "597"
+    },
+    {
+      "id": "T2",
+      "category": "retrieval",
+      "name": "RAG Fusion \u22653 variants",
+      "status": "PASS",
+      "before": "D-rated (single-query)",
+      "after": "4-variants",
+      "yt": "598"
+    },
+    {
+      "id": "T3",
+      "category": "retrieval",
+      "name": "LCR reorders input (length+members preserved)",
+      "status": "PASS",
+      "before": "F-rated (no reorder)",
+      "after": "reorder-confirmed",
+      "yt": "599"
+    },
+    {
+      "id": "T4",
+      "category": "retrieval",
+      "name": "doc-chain.py CLI responds",
+      "status": "PASS",
+      "before": "absent-pre-session",
+      "after": "CLI-ok",
+      "yt": "600"
+    },
+    {
+      "id": "T5",
+      "category": "retrieval",
+      "name": "KG traverse harness 9/9",
+      "status": "PASS",
+      "before": "fallback-only-pre-613",
+      "after": "9-pass",
+      "yt": "601,613"
+    },
+    {
+      "id": "T6",
+      "category": "data",
+      "name": "FAISS indexes 4/4 present",
+      "status": "PASS",
+      "before": "3/4 (chaos missing)",
+      "after": "4/4",
+      "yt": "602,612"
+    },
+    {
+      "id": "T6",
+      "category": "data",
+      "name": "FAISS row-count parity",
+      "status": "PASS",
+      "before": "not-measurable-pre-612",
+      "after": "all-tables-match",
+      "yt": "602,612"
+    },
+    {
+      "id": "T7",
+      "category": "retrieval",
+      "name": "embed_query != embed_document",
+      "status": "PASS",
+      "before": "B-rated (unprefixed)",
+      "after": "vectors-differ",
+      "yt": "603"
+    },
+    {
+      "id": "T7",
+      "category": "data",
+      "name": "all transcripts embedded (838/838)",
+      "status": "PASS",
+      "before": "837/0 unembedded",
+      "after": "838/838",
+      "yt": "603"
+    },
+    {
+      "id": "T8",
+      "category": "retrieval",
+      "name": "DLI E2E hybrid search returns rows",
+      "status": "PASS",
+      "before": "baseline-0.86-precision",
+      "after": "rows-returned",
+      "yt": "604"
+    },
+    {
+      "id": "T9",
+      "category": "observability",
+      "name": "RAGLatencyP95High threshold = >12",
+      "status": "PASS",
+      "before": "> 6 (firing)",
+      "after": ">12 (inactive)",
+      "yt": "607"
+    },
+    {
+      "id": "T11",
+      "category": "quality",
+      "name": "RAGAS set 33+ total, 15+ hard-eval",
+      "status": "PASS",
+      "before": "18 total, 0 hard",
+      "after": "33 total, 15 hard",
+      "yt": "610"
+    },
+    {
+      "id": "T13",
+      "category": "observability",
+      "name": "kb_hard_eval_* metrics \u22656",
+      "status": "PASS",
+      "before": "0 (cron broken)",
+      "after": "6 metrics",
+      "yt": "614"
+    },
+    {
+      "id": "T14",
+      "category": "data",
+      "name": "3 pve01 incidents backfilled + embedded",
+      "status": "PASS",
+      "before": "0 rows",
+      "after": "3/3",
+      "yt": "615"
+    },
+    {
+      "id": "T15",
+      "category": "retrieval",
+      "name": "mtime-sort intent 4/4",
+      "status": "PASS",
+      "before": "no-intent-detector",
+      "after": "4/4 cases",
+      "yt": "616"
+    },
+    {
+      "id": "T15",
+      "category": "retrieval",
+      "name": "list-recent CLI returns rows",
+      "status": "PASS",
+      "before": "CLI-absent",
+      "after": "3-rows",
+      "yt": "616"
+    },
+    {
+      "id": "T16",
+      "category": "observability",
+      "name": "3 absent-metric alerts in cluster",
+      "status": "PASS",
+      "before": "staleness-alerts-blind-to-absence",
+      "after": "3/3",
+      "yt": "617"
+    },
+    {
+      "id": "T17",
+      "category": "security",
+      "name": "unified-guard precision 22/22",
+      "status": "PASS",
+      "before": "9 false-blocks on prose",
+      "after": "22-pass",
+      "yt": "bonus"
+    },
+    {
+      "id": "T19",
+      "category": "integration",
+      "name": "mempalace 22/22",
+      "status": "PASS",
+      "before": "not-filed-as-tracked-suite",
+      "after": "22-pass",
+      "yt": "bonus"
+    },
+    {
+      "id": "T10",
+      "category": "quality",
+      "name": "hard-eval 7q judge_hit@5 \u2265 0.85",
+      "status": "PASS",
+      "before": "0.571 (4/7)",
+      "after": "0.857",
+      "yt": "609"
+    },
+    {
+      "id": "T12",
+      "category": "reliability",
+      "name": "qwen2.5 JSON \u2265 98%",
+      "status": "PASS",
+      "before": "87.5% qwen3 first-try",
+      "after": "100.0%",
+      "yt": "611"
+    },
+    {
+      "id": "T18",
+      "category": "reliability",
+      "name": "synth fallback 17/17",
+      "status": "PASS",
+      "before": "1 mode (empty only)",
+      "after": "17-pass",
+      "yt": "bonus"
+    }
+  ]
+}

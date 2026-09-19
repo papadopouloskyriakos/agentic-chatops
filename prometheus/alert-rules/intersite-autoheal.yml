@@ -1,0 +1,54 @@
+# intersite-autoheal.yml — alerts over the Layer-2 intersite tunnel auto-heal consumer
+# (scripts/intersite-tunnel-heal.py, IFRNLLEI01PRD-1833, 2026-08-14).
+#
+# MIRROR file: the deployed truth is the PrometheusRule Terraform in
+# infrastructure/nl/production/k8s/namespaces/monitoring/intersite-autoheal-alerts.tf.
+# Edit BOTH when changing an expression (same convention as intersite-bgp-mesh.yml).
+groups:
+  - name: intersite-autoheal
+    interval: 1m
+    rules:
+      - alert: IntersiteAutohealFailed
+        expr: intersite_autoheal_last_result == 0
+        for: 15m
+        labels:
+          severity: critical
+          category: bgp-intersite
+        annotations:
+          summary: "Intersite auto-heal FAILED on the {{ $labels.leg }} leg"
+          description: >-
+            intersite-tunnel-heal.py executed the full both-ends re-key for the
+            {{ $labels.leg }} NL<->GR leg but BGP did not re-Establish within the
+            verify window. The wedge is deeper than the runbook re-key — human
+            needed. Runbook: infrastructure/nl/production/edge/CLAUDE.md
+            "Total NL<->GR partition" + docs/runbooks/intersite-tunnel-autoheal.md.
+
+      - alert: IntersiteAutohealEscalated
+        expr: increase(intersite_autoheal_escalations_total[30m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: bgp-intersite
+        annotations:
+          summary: "Intersite auto-heal escalated to human"
+          description: >-
+            The auto-heal consumer hit its 3-strike cap (repeated heals without
+            lasting recovery) or found the GR site unreachable over plain
+            internet (outage, not a wedge). It will not retry — investigate via
+            docs/runbooks/intersite-tunnel-autoheal.md.
+
+      - alert: IntersiteAutohealStale
+        expr: >-
+          (intersite_autoheal_armed == 1)
+          and ((time() - intersite_autoheal_last_run_timestamp) > 1800)
+        for: 10m
+        labels:
+          severity: warning
+          category: bgp-intersite
+        annotations:
+          summary: "Intersite auto-heal consumer is stale while armed"
+          description: >-
+            gateway.intersite_autoheal_armed is present but the consumer has not
+            run in 30+ min — the bgp-mesh-watchdog hook (Cronicle emqurqyj26j)
+            is likely broken, so the armed heal layer is silently dark. Silent
+            when disarmed by design.

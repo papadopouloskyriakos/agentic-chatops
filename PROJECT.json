@@ -1,0 +1,30 @@
+{
+  "slug": "claude-gateway",
+  "title": "Claude Gateway \u2014 Agentic ChatOps/SecOps/DevOps Platform",
+  "youtrack_prefix": "IFRNLLEI01PRD",
+  "matrix_room": "!AOMuEtXGyzGFLgObKN:matrix.example.net",
+  "primary_language": "python",
+  "test_command": "scripts/qa/run-qa-suite.sh",
+  "lint_command": "python3 -m py_compile $(git ls-files '*.py')",
+  "bounded_contexts": [
+    "risk-classification",
+    "prediction-gate",
+    "auto-resolve",
+    "governance",
+    "tier1-suppression",
+    "interfaces",
+    "spec-governance"
+  ],
+  "max_parallel_workers": 4,
+  "max_loc_per_worker": 500,
+  "owners": [
+    "zlispqin@mail.example.net"
+  ],
+  "risk_profile": "high",
+  "surfaces": {
+    "http_api": true,
+    "events": true,
+    "persistent_data": true
+  },
+  "spec_scope": "safety-critical behavioral surfaces + real component interfaces only; the full ~71k-LOC estate is intentionally NOT spec-regenerable (see adr/0001)."
+}

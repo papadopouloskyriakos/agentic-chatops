@@ -1,0 +1,18 @@
+[Unit]
+Description=Watch wiki source trees for changes
+After=local-fs.target
+
+[Path]
+# Any modification under these trees triggers a one-shot rebuild. The
+# trailing / narrows watch to contents; PathChanged fires once per inode
+# change even for rapid edits (unlike PathModified which fires per write).
+PathChanged=/app/claude-gateway/docs
+PathChanged=/app/claude-gateway/wiki
+PathChanged=/app/claude-gateway/config/curriculum.json
+PathChanged=/app/claude-gateway/README.extensive.md
+# Systemd collapses multiple path events arriving within ~2 seconds into
+# one invocation of the triggered unit.
+Unit=claude-gateway-wiki-build.service
+
+[Install]
+WantedBy=multi-user.target
