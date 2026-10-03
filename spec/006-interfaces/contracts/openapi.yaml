@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Claude Gateway Webhook Surface
+  version: 1.0.0
+  description: HTTP webhook endpoints served by the n8n gateway instance (REQ-501, REQ-504).
+servers:
+  - url: https://n8n.example.net
+paths:
+  /webhook/agentic-stats:
+    get:
+      operationId: getAgenticStats
+      summary: Portfolio agentic statistics (REQ-501)
+      responses:
+        '200':
+          description: Stats payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /webhook/session-replay:
+    post:
+      operationId: postSessionReplay
+      summary: Replay a recorded session by id (REQ-501, REQ-504)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id]
+              properties:
+                session_id:
+                  type: string
+      responses:
+        '200':
+          description: Replay result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Unknown session (REQ-504)
+        '400':
+          description: Malformed input

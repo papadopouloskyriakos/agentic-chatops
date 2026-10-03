@@ -1,0 +1,84 @@
+# Deployed to K8s via the IaC tf:
+#   infrastructure/nl/production/k8s/namespaces/monitoring/bgp-upstream-alerts.tf
+# This YAML is retained because it is consumed by:
+#   - scripts/qa/suites/test-726-prom-alert-rules.sh (promtool test rules)
+# When adding / changing / removing an alert, edit BOTH files.
+#
+# Metric source (node_exporter textfile collector on nl-claude01):
+#   scripts/write-bgp-upstream-metrics.py  (cron */5)
+#   -> /var/lib/node_exporter/textfile_collector/bgp_upstream.prom
+# The script reuses get_ripe_bgp() from scripts/vpn-mesh-stats.py so the
+# alert definition of "upstream" + "transit" matches what the live status
+# diagram on kyriakos.papadopoulos.tech renders. Both pipelines query
+# RIPE STAT independently; a RIPE outage degrades both identically.
+#
+# Background: 2026-05-16 status-diagram fix +
+# claude-gateway memory/status_diagram_upstream_render_gaps_20260516.md.
+groups:
+  - name: bgp-upstream-health
+    interval: 1m
+    rules:
+      - alert: AS64512UpstreamMissing
+        expr: as214304_upstream_visible == 0
+        for: 10m
+        labels:
+          severity: critical
+          category: bgp-public
+        annotations:
+          summary: "AS64512 upstream AS{{ $labels.asn }} ({{ $labels.name }}) not visible at RIPE for 10+ min"
+          description: >
+            RIPE asn-neighbours has stopped reporting AS{{ $labels.asn }}
+            ({{ $labels.name }}) as a left-neighbour of AS64512. This
+            typically means the eBGP session between iFog (AS34927) or
+            Gigahost/Terrahost (AS56655) and {{ $labels.name }} is down.
+            Verify the session is up at the upstream side. If BOTH
+            upstreams are missing, our /48 prefix is unreachable from
+            most of the internet.
+            Runbook: docs/runbooks/upstream-bgp-failure.md.
+
+      - alert: AS64512UpstreamCountLow
+        expr: as214304_upstream_count < 2
+        for: 5m
+        labels:
+          severity: critical
+          category: bgp-public
+        annotations:
+          summary: "AS64512 has only {{ $value }} upstream peer(s) visible at RIPE"
+          description: >
+            We're single-homed (or worse) for the {{ $value }} upstream
+            still visible. The second upstream provides our redundancy —
+            losing it means a single eBGP session away from full
+            unreachability. Check status of iFog and Terrahost peerings.
+            Runbook: docs/runbooks/upstream-bgp-failure.md.
+
+      - alert: AS64512VisibilityLow
+        expr: as214304_visibility_v6_pct < 90
+        for: 15m
+        labels:
+          severity: warning
+          category: bgp-public
+        annotations:
+          summary: "AS64512 v6 prefix visibility dropped to {{ $value }}%"
+          description: >
+            Less than 90% of RIPE RIS peers can see our /48 prefix. Could
+            be partial route propagation, a RIS data hiccup, or a
+            real-world reachability drop. Cross-check at bgp.tools and
+            Cloudflare Radar. If visibility stays < 90% for hours, treat
+            it as a real partial-outage.
+            Runbook: docs/runbooks/upstream-bgp-failure.md.
+
+      - alert: AS64512BGPMetricsExporterStale
+        expr: time() - as214304_bgp_metrics_last_run_timestamp > 1800
+        for: 10m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "AS64512 BGP-upstream metrics exporter has not run in 30+ min"
+          description: >
+            scripts/write-bgp-upstream-metrics.py is cron `*/5` on
+            nl-claude01 — if its last-run timestamp is more than
+            30 min behind, the cron is wedged, the script is erroring, or
+            RIPE STAT is unreachable for an extended period. Without
+            this exporter, the AS64512Upstream* alerts cannot fire.
+            Check `crontab -l` and run manually to reproduce.

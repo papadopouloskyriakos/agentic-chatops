@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.net/schemas/quiz-generator.schema.json",
+  "title": "Quiz generator output (IFRNLLEI01PRD-749 / G2.P1.1)",
+  "description": "Constrains gemma3:12b output for scripts/lib/quiz_generator.py. Passed as `format` to Ollama when OLLAMA_USE_GRAMMAR=1; falls back to format=json on error. Hallucination gate (every source_snippets[].verbatim_text must be substring of concatenated sources) is verified caller-side AFTER schema validation.",
+  "type": "object",
+  "required": [
+    "question_text",
+    "rubric",
+    "bloom_level",
+    "question_type",
+    "source_snippets"
+  ],
+  "properties": {
+    "question_text": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 2000
+    },
+    "rubric": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 2000
+    },
+    "bloom_level": {
+      "type": "string",
+      "enum": [
+        "recall",
+        "recognition",
+        "explanation",
+        "application",
+        "analysis",
+        "evaluation",
+        "teaching_back"
+      ]
+    },
+    "question_type": {
+      "type": "string",
+      "enum": [
+        "fill-in",
+        "explanation",
+        "case",
+        "multiple-choice",
+        "short-answer"
+      ]
+    },
+    "source_snippets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["source_path", "section", "verbatim_text"],
+        "properties": {
+          "source_path": {"type": "string", "minLength": 1},
+          "section": {"type": "string"},
+          "verbatim_text": {"type": "string", "minLength": 8}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

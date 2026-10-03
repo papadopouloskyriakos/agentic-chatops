@@ -1,0 +1,276 @@
+# promtool test rules for agentic-health.yml
+#
+# Exercises both alerts under synthetic time-series and asserts they fire
+# at the expected eval_time with the expected labels. Validates that the
+# `for` durations are correct (30m / 10m) and that labels propagate.
+#
+# Run: kubectl -n monitoring exec ... promtool test rules /path/to/agentic-health.test.yml
+rule_files:
+  - agentic-health.yml
+
+tests:
+  # ─── SkillPrereqMissing ──────────────────────────────────────────────────
+  - interval: 1m
+    name: "SkillPrereqMissing fires after 30m of requires_ok_all=0"
+    input_series:
+      # Simulate a skill whose prereq is broken for 40 minutes straight
+      - series: 'chatops_skill_requires_ok_all{skill="cisco-asa-specialist",kind="agent"}'
+        values: '0+0x40'
+      # A concurrent healthy skill (should not fire)
+      - series: 'chatops_skill_requires_ok_all{skill="triage",kind="skill"}'
+        values: '1+0x40'
+    alert_rule_test:
+      # Before 30m — no alert (for: 30m requires sustained 0)
+      - eval_time: 29m
+        alertname: SkillPrereqMissing
+        exp_alerts: []
+      # After 30m + 1m — alert fires for the broken skill only.
+      # Description uses `>` (folded with trailing newline) to match the
+      # block-scalar style in agentic-health.yml's annotation.
+      - eval_time: 31m
+        alertname: SkillPrereqMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              skill: cisco-asa-specialist
+              kind: agent
+            exp_annotations:
+              summary: "Skill cisco-asa-specialist (agent) has an unsatisfied prereq"
+              description: >
+                One or more entries in the skill's `requires.bins` or `requires.env`
+                block are not available on the host (binary missing, or env var unset).
+                Full report: `scripts/audit-skill-requires.sh`. Source of truth:
+                `.claude/agents/.../*.md` frontmatter.
+                Runbook: docs/runbooks/ (general skill-maintenance guidance).
+
+  # Recovery path: metric comes back to 1 → alert resolves
+  - interval: 1m
+    name: "SkillPrereqMissing clears when requires_ok_all returns to 1"
+    input_series:
+      # 35m of 0, then 20m of 1 → alert fires, then clears
+      - series: 'chatops_skill_requires_ok_all{skill="ci-debugger",kind="agent"}'
+        values: '0+0x35 1+0x20'
+    alert_rule_test:
+      - eval_time: 32m
+        alertname: SkillPrereqMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              skill: ci-debugger
+              kind: agent
+            exp_annotations:
+              summary: "Skill ci-debugger (agent) has an unsatisfied prereq"
+              description: >
+                One or more entries in the skill's `requires.bins` or `requires.env`
+                block are not available on the host (binary missing, or env var unset).
+                Full report: `scripts/audit-skill-requires.sh`. Source of truth:
+                `.claude/agents/.../*.md` frontmatter.
+                Runbook: docs/runbooks/ (general skill-maintenance guidance).
+      # After recovery for 20 min (eval_time 55m) — metric has been 1 since
+      # t=35m. 20 minutes of recovery. Alert should be resolved.
+      - eval_time: 55m
+        alertname: SkillPrereqMissing
+        exp_alerts: []
+
+  # ─── SkillMetricsExporterStale ──────────────────────────────────────────
+  - interval: 1m
+    name: "SkillMetricsExporterStale fires when exporter stops"
+    input_series:
+      # Exporter timestamp frozen at unix=0. Expression is
+      #   time() - X > 1800
+      # time() at eval_time T (minutes) = T*60. Condition holds when
+      # T*60 > 1800, i.e., T > 30m. With `for: 10m` hold, alert begins
+      # firing at T=40m+1m (eval interval).
+      - series: 'chatops_skill_metrics_last_run_timestamp'
+        values: '0+0x60'
+    alert_rule_test:
+      # At 30m the condition just went TRUE → in the `for` hold window
+      - eval_time: 35m
+        alertname: SkillMetricsExporterStale
+        exp_alerts: []
+      # At 41m the 10m `for` hold is met → alert fires
+      - eval_time: 41m
+        alertname: SkillMetricsExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+            exp_annotations:
+              summary: "skill-metrics exporter has not run in 30+ minutes"
+              description: >
+                `scripts/write-skill-metrics.sh` is cron `*/5` — if its last-run
+                timestamp is more than 30 minutes behind, the cron is wedged
+                or the script is erroring. Check `crontab -l` and run manually
+                to reproduce. Without this exporter, `SkillPrereqMissing`
+                cannot fire.
+  # ─── TerritoryGateUnwired (IFRNLLEI01PRD-1408) ──────────────────────────────
+  - interval: 1m
+    name: "TerritoryGateUnwired fires after 15m of wiring_violation=1"
+    input_series:
+      # Gate ON but the hook is unwired -> violation held high for 20m.
+      - series: 'gateway_territory_gate_wiring_violation'
+        values: '1+0x20'
+    alert_rule_test:
+      # Within the 15m `for` hold -> no alert yet.
+      - eval_time: 14m
+        alertname: TerritoryGateUnwired
+        exp_alerts: []
+      # After the 15m hold -> fires (critical -> Matrix/YT; not tier-1 since 2026-08-25).
+      - eval_time: 16m
+        alertname: TerritoryGateUnwired
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              category: agentic-platform
+            exp_annotations:
+              summary: "territory gate ON but its PreToolUse hook is UNWIRED — enforcement silently off"
+              description: >
+                ~/gateway.territory_gate exists but scripts/hooks/territory-gate.py is no longer
+                referenced in a session-settings surface (interactive and/or dispatched) or fails
+                to parse, so high-stakes network/k8s/pve writes can run WITHOUT loading the
+                territory CLAUDE.md. Re-wire it in ~/.claude/settings.json +
+                config/dispatched-session-settings.json, or rm ~/gateway.territory_gate to
+                intentionally disable the gate. Check: scripts/check-territory-gate-wiring.sh.
+
+  # ─── Paging bridge self-monitoring (2026-08-25 ntfy cutover) ─────────────
+  - interval: 1m
+    name: "PagingBridgeStale fires when the heartbeat series is absent"
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: PagingBridgeStale
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: PagingBridgeStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              category: agentic-platform
+              site: nl
+            exp_annotations:
+              summary: "paging bridge heartbeat stale — tier-1 pages may not be delivered"
+              description: >
+                paging_bridge_heartbeat_timestamp_seconds{site="nl"} is stale or absent.
+                The paging bridge on nl-claude01:9106 (ntfy push + ULTRA SMS) is down
+                or its metrics loop died. Alertmanager keeps retrying webhooks, but nothing
+                is pushing to the phone. Check: systemctl --user status paging-bridge
+                (XDG_RUNTIME_DIR=/run/user/1000); journal for OOM kills (user slice runs at
+                oom_score_adj=200). Runbook: docs/runbooks/paging-ntfy.md.
+  - interval: 1m
+    name: "PagingPushDown fires after 5m of paging_ntfy_up=0"
+    input_series:
+      - series: 'paging_ntfy_up{site="nl"}'
+        values: '0+0x15'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PagingPushDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PagingPushDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              category: agentic-platform
+              site: nl
+            exp_annotations:
+              summary: "ntfy push channel down — bridge failing over to capped SMS"
+              description: >
+                The paging bridge's ntfy health probe is failing (paging_ntfy_up 0 for 5m+).
+                ntfy lives in the Matrix stack on nl-matrix01 (LXC on nl-pve01) —
+                check that host/stack first. The bridge already sent an edge-triggered
+                PagingPushDown SMS and fails tier-1 pages over to SMS (cap 3/h).
+                Runbook: docs/runbooks/paging-ntfy.md.
+
+  # ─── Gpu01VramSaturated ──────────────────────────────────────────────────
+  - interval: 1m
+    name: "Gpu01VramSaturated fires after 30m above 95%"
+    input_series:
+      - series: 'nvidia_smi_memory_used_bytes{instance="nl-gpu01"}'
+        values: '23000000000+0x40'
+      - series: 'nvidia_smi_memory_total_bytes{instance="nl-gpu01"}'
+        values: '24VMID_REDACTED+0x40'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: Gpu01VramSaturated
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: Gpu01VramSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              instance: nl-gpu01
+            exp_annotations:
+              summary: "nl-gpu01 VRAM >95% used for 30m — Ollama generates will fail to load"
+              description: >
+                The shared RTX 3090 Ti has been >95% allocated for 30 minutes. Ollama needs
+                ~5 GB free for qwen2.5:7b and ~9 GB for gemma3:12b; below that the judge and
+                RAG synth OOM on every load and serialize every embed client behind 22 s
+                load-failures. Find the hoarder: `nvidia-smi --query-compute-apps=pid,used_memory`
+                + `curl nl-gpu01:11436/stats` / `:11437/stats` (PyTorch services should sit
+                at ~2.2 GB and idle-unload). Runbook: docs/runbooks/rerank-service.md § Dynamic VRAM.
+  - interval: 1m
+    name: "Gpu01VramSaturated stays silent at 90%"
+    input_series:
+      - series: 'nvidia_smi_memory_used_bytes{instance="nl-gpu01"}'
+        values: '2VMID_REDACTED0+0x40'
+      - series: 'nvidia_smi_memory_total_bytes{instance="nl-gpu01"}'
+        values: '24VMID_REDACTED+0x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: Gpu01VramSaturated
+        exp_alerts: []
+
+  # ─── OllamaModelNotGpuOnly ───────────────────────────────────────────────
+  - interval: 1m
+    name: "OllamaModelNotGpuOnly fires after 15m of gpu_only=0"
+    input_series:
+      - series: 'ollama_model_gpu_only{model="qwen2.5:7b"}'
+        values: '0+0x20'
+      - series: 'ollama_model_gpu_only{model="nomic-embed-text:latest"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: OllamaModelNotGpuOnly
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: OllamaModelNotGpuOnly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              model: qwen2.5:7b
+            exp_annotations:
+              summary: "Ollama model qwen2.5:7b is partially/fully on CPU for 15m"
+              description: >
+                write-ollama-gpu-metrics.py reports a loaded model whose size_vram < size —
+                Ollama is splitting it to CPU (VRAM starvation or a stale NVML handle after a
+                driver/persistenced restart). Inference is 10-20x slower and the runner burns
+                host CPU. Check `curl nl-gpu01:11434/api/ps`, `nvidia-smi`, and
+                `journalctl -t ollama-nvml-selfheal` on nl-gpu01.
+
+  # ─── OllamaMetricsExporterStale ──────────────────────────────────────────
+  - interval: 1m
+    name: "OllamaMetricsExporterStale fires when the textfile timestamp is 15m+ old"
+    input_series:
+      - series: 'ollama_metrics_last_run_timestamp'
+        values: '0+0x40'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: OllamaMetricsExporterStale
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: OllamaMetricsExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+            exp_annotations:
+              summary: "ollama GPU metrics exporter on nl-gpu01 has not run in 15+ minutes"
+              description: >
+                /usr/local/bin/write-ollama-gpu-metrics.py (root cron */1 on nl-gpu01) writes
+                /var/lib/node_exporter/textfile_collector/ollama_gpu.prom. If it is stale, the
+                OllamaModelNotGpuOnly alert is blind. Check the root crontab and node_exporter
+                on nl-gpu01.

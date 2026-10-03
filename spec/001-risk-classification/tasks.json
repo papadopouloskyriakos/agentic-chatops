@@ -1,0 +1,3 @@
+{"tasks":[
+  {"task_id":"RC-1","title":"3-band classifier emits band + sms_required","dependencies":[],"parallelizable":true,"files_owned":["scripts/classify-session-risk.py"],"requirement_ids":["REQ-001","REQ-002","REQ-003","REQ-004","REQ-005","REQ-006","REQ-007"],"bounded_context":"risk-classification","acceptance_test":"spec/001-risk-classification/acceptance/risk-bands.feature","risk_score":0.6}
+]}
