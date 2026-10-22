@@ -1,0 +1,21 @@
+{
+  "feature_id": "<feature-slug>",
+  "tasks": [
+    {
+      "task_id": "T-001",
+      "title": "<one-line task title>",
+      "status": "pending",
+      "dependencies": [],
+      "parallelizable": true,
+      "files_owned": ["src/path/to/file.ext"],
+      "requirement_ids": ["REQ-NNN"],
+      "bounded_context": "<one of PROJECT.json#bounded_contexts>",
+      "details": "Implement per contracts/openapi.yaml#/paths/~1foo/post; validate via schemas/foo.json",
+      "acceptance_test": "go test ./src/path -run TestFoo",
+      "complexity": 5,
+      "risk_score": 0.5,
+      "max_wall_clock_minutes": 30,
+      "max_loc_delta": 300
+    }
+  ]
+}

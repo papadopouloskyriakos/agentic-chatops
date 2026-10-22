@@ -1,0 +1,110 @@
+This task is pure synthesis of the provided findings into a markdown scorecard. No tool calls needed — the data is all here. The source is the OpenAI "A Practical Guide to Building Agents" guide, and every finding already traces to it.
+
+# claude-gateway — OpenAI Agents-Guide Scorecard (IFRNLLEI01PRD-1423)
+
+Source: OpenAI, *A Practical Guide to Building Agents*. Source-pure — no Anthropic guidance mixed in. All scores are the adversarially-verified `adjusted_score`.
+
+## 1. Summary Table
+
+| Dimension | Final Score | One-line gap to A |
+|---|---|---|
+| When-to-build fit | **A** | None material — LLM placed exactly where prescribed; only a read-only confirm-close cost tail remains (does not lower grade). |
+| Model selection discipline | **D** | Downshift defeated by a pipe-counting bug → 0/179 simple sessions on Sonnet; no model-selection eval; cost ledger never feeds routing. |
+| Tool design | **A** | Agents-as-tools registry truncates descriptions (regex frontmatter parser → bare agent name); rich `.md` docs don't reach the orchestrating-LLM surface. |
+| Instruction quality | **A** | None — injected chatops routine is byte-identical to SKILL.md; only a missing parity *guard* for future drift remains (minor hardening). |
+| Single-vs-multi-agent right-sizing | **B** | Delegation block injected to 0/331 live sessions — sub-agents unreachable in the dispatched runtime (wiring gap, not design gap). |
+| Orchestration pattern fit | **A** | None material — clean Manager pattern, read-only workers structurally enforced; only a dormant OpenClaw handoff field to prune. |
+| Guardrails — layered defense | **B** | Rules blocklist (unified-guard) not wired to the `--dangerously-skip-permissions` autonomous path; no relevance/moderation classifier; semantic rail dark. |
+| Human-intervention design | **B** | Only 1 of 2 OpenAI triggers reaches a human — failure-threshold escalation (cost/tool-call/handoff-depth) annotates but never pages or pauses. |
+| Optimistic execution + tripwires | **C** | No async guardrail watches the live trajectory and aborts on breach; the one async component (poller) is read-only with no kill authority. |
+| Iterative deployment discipline | **A** | None material — grow-and-harden loop is empirically real; only an operator-of-one validation signal + a few never-graduating dark stages. |
+
+## 2. Per-Dimension Detail
+
+### When-to-build fit — A
+- **OpenAI principle:** *When should you build an agent?* — agents fit complex/nuanced judgment, hard-to-maintain rulesets, heavy unstructured-data reliance; otherwise "a deterministic solution may suffice." Discriminating test: LLM does judgment, cheap pre-filters and safety-critical gates stay deterministic.
+- **Live evidence:** Incident triage over unstructured high-cardinality infra state is the qualifying use case. Every safety-critical decision is deterministic, not LLM: `classify-session-risk.py:121-350` pure-regex risk gate (only subprocess calls at 608/621 invoke `infragraph-query.py`, no LLM); `lib/infragraph.py:39` MODEL_VERSION=2 sqlite/graph; `reconcile-completed-sessions.py:211-307` mechanical `_action_verdict` (match/partial/deviation); `write-governance-metrics.py:67,147` plain ≥3×/30d COUNT+INSERT auto-demote. Deterministic suppression (`infra-triage.sh`: maintenance→chaos→Step 0 dedup→Step 0.5 `tier1_suppression.py` keyword+0.7-confidence) gates before any `claude -p`. Cron census: 165 non-comment entries, ~10 spend an LLM (all genuine NL/judgment), ~155 deterministic. GEPA generate-only + dormant. No over-agentification found.
+- **Gap to A:** None material. Residual: a full Opus session dispatches for read-only confirm-close alerts (`reconcile.py:300-301`, e.g. -1117) — a cost tail, not misplaced judgment.
+- **Fix:** Optional deterministic "recovery-confirm" pre-check (single health re-poll) to auto-close self-recovered up/down alerts; fail-open to LLM if uncertain. **effort: low · risk: low · orchestrator-dependent: no**
+
+### Model selection discipline — D
+- **OpenAI principle:** *Selecting your models* — (1) set up evals for a baseline; (2) meet accuracy target with the most capable model; (3) downshift to smaller models where accuracy holds. Accuracy-gated downshift driven by evals, not a static default.
+- **Live evidence:** Routing intent exists but is non-functional. Build Prompt node L143 `var priorIncidents = (kbRaw.match(/\|/g)||[]).length;` counts ALL pipes in pipe-dense Query Knowledge stdout (`kb-semantic-search.py` emits 7 pipes/row + 3 from RETRIEVAL_QUALITY) → even one result row = 10 pipes > 5 → downshift gate at L146-150 structurally unreachable → forced opus. Wiring fix (commit `5932c68`/merge `645c3a1`) is real and merged (`--model "${SESSION_MODEL:-opus}"`) but dead. Live `gateway.db` session_log: 312 opus-4-8, 239 opus-4-6, 172 opus-4-7, 15 opus-4-6, 0 sonnet/haiku; 179 simple-category sessions → 0 Sonnet; post-fix (>06-24 16:00) 18 opus-4-8 / 0 sonnet. 11 eval-sets, NONE evaluates model selection (`run-hard-eval.py` model refs are the JUDGE backend). Cost captured (`llm_cost_total`, `llm_usage` 370k rows) but never fed into routing.
+- **Gap to A:** All three principles non-functional: (1) no model-selection eval at all; (2) Opus-default holds only accidentally; (3) downshift coded-but-dead (0/179, 0 post-fix).
+- **Fix:** Replace pipe-count proxy with a real `PRIOR_INCIDENTS:<n>` signal from `kb-semantic-search.py`; add a small availability/certificate model-selection eval-set (local judge) asserting Sonnet meets target; add a holistic-health assertion that >0% of eligible simple sessions run on the smaller model. **effort: low · risk: low · orchestrator-dependent: no**
+
+### Tool design — A
+- **OpenAI principle:** Three tool types — Data, Action, Orchestration (agents-as-tools); each "standardized, well-documented, thoroughly tested, reusable"; split rather than overload past ~10-15 tools.
+- **Live evidence:** 9 MCP Data servers (match `~/.claude.json`); Action tools fenced from sub-agents (`k8s-diagnostician.md:43,113` "Never kubectl apply. The tool allowlist excludes these for a reason"); Orchestration via `agent_as_tool.py` (docstring mirrors OpenAI Agents SDK `@function_tool`, lines 5-7) + `handoff_depth` POLL=5/HALT=10 + cycle detection. All 11 agents read-only by `tools:` allowlist (Read/Grep/Glob/Bash ±WebFetch/WebSearch/ToolSearch); max 6 tools (security-analyst), far under 15. `audit-skill-requires.sh`/`audit-skill-versions.sh`/`render-skill-index.py` present; QA suites test-642 + test-team-formation exit 0 live.
+- **Gap to A:** Already at A. `agent_as_tool.py list` returns `"description":"ci-debugger"` (bare name) — regex frontmatter parser (`:93-114`) captures empty for the 10/11 agents using folded `description: >` (self-flagged "switch to pyyaml" ~L104). The rich `.md` descriptions don't reach the agents-as-tools surface an orchestrating LLM reads.
+- **Fix:** Replace hand-rolled regex parser with real YAML load (pyyaml/folded-scalar-aware) so full descriptions round-trip; re-run test-642. **effort: low · risk: low · orchestrator-dependent: no**
+
+### Instruction quality — A
+- **OpenAI principle:** *Instructions* — convert runbooks into routines; break down tasks; define clear actions; capture edge cases; keep routines in lockstep with source documents.
+- **Live evidence:** Runbooks→skills; the master `chatops-workflow/SKILL.md` is verbatim-injected into every infra Build Prompt — the injected body and SKILL.md body are **byte-for-byte identical (both 12967 bytes, diff=0)** after stripping the wrapper header and the YAML frontmatter (correctly excluded). Step-decomposed plans (per-step expected/if_unhealthy), ReAct THOUGHT/ACTION/OBSERVATION, action-precise control tokens `[POLL]`/`[AUTO-RESOLVE]`/`CONFIDENCE:` with good+bad few-shots, rich edge-case tables (conservative-remediation situation→action, band-aware risk branches, STEP-BACK, fail-closed fallbacks).
+- **Gap to A:** None. The B-blocking "~5% drift" claim was an arithmetic artifact (full-file vs a stale code-comment number; the 592-byte delta is the correctly-excluded frontmatter). Git commit `69afd12` captured the final v1.1.0 body; no post-injection drift. Residual: no automated parity *guard* asserting injected-body == SKILL.md-body, so a future edit could drift the snapshot.
+- **Fix:** Add a QA test (mirror test-1408 parity pattern) failing red when injected body != current SKILL.md body — belt-and-suspenders for future edits. **effort: low · risk: low · orchestrator-dependent: yes**
+
+### Single-vs-multi-agent right-sizing — B
+- **OpenAI principle:** Maximize a single agent first; split only on if-then-else thicket or tool overload; run loop needs proper exit conditions.
+- **Live evidence:** Primary unit is a single agent with A-grade exit conditions: `timeout $TIMEOUT claude -p` (600s default), `kill -0 $PID` poll, JSONL `type:"result"` termination, `-r <SID>` resume. Build Prompt computes `isComplexSession` and injects the orchestrator-workers delegation block ("Only delegate when you need the RESULT, not the journey"). 11 specialist agents defined. BUT: 0 Task tool_use across 331 live `claude-run-*.jsonl`; `init.agents` = built-ins only (`claude`/`Explore`/`general-purpose`/`Plan`/`statusline-setup`); team_charter event_log = 0. Root cause: Launch nodes pass `--settings` but no `--agents`; dispatched cwd is the IaC/product repo with no `.claude/agents/`; agents live only in the never-dispatched gateway repo. Also: `holistic-agentic-health.sh §7` only counts agent files on disk — masks the unreachability with a green check.
+- **Gap to A:** The "split into multiple agents" half is documented-but-uninvokable — 0/331 sessions could exercise it.
+- **Fix:** Add `--agents .../claude-gateway/.claude/agents` to the Launch/resume/fresh nodes (or symlink into dispatched cwd); assert Task rows + non-zero team_charter on complex sessions; add a reachability invariant (correcting the count!=reachable false-positive); or honestly remove the dead block if data shows no benefit. **effort: low · risk: med · orchestrator-dependent: yes**
+
+### Orchestration pattern fit — A
+- **OpenAI principle:** Manager (agents-as-tools, central agent retains context/control, one synthesized response) vs Decentralized (handoffs, true transfer-of-control). Pick Manager when one agent drives flow and merges sub-results.
+- **Live evidence:** Clean Manager pattern. One central `claude -p` session per alert; Build Prompt injects the textbook agents-as-tools directive ("launch ALL relevant agents IN PARALLEL", "Sub-agents are READ-ONLY researchers — they cannot make changes", "WHEN NOT TO: cascading failure tracing, fix execution"). All 11 agents' `tools:` lines exclude Edit/Write/MultiEdit → transfer-of-control is structurally impossible. `agent_as_tool.py` "mirroring the OpenAI Agents SDK @function_tool pattern... Does NOT replace the deterministic Task path"; `handoff_depth.py` is parent→child spawn (POLL≥5/halt≥10), not peer transfer; `team_formation.py` emits team_charter. 52 runner nodes, zero peer-transfer/handoff nodes.
+- **Gap to A:** None material. Dormant OpenClaw T1→T2 fields in `handoff.py` could read as a quasi-handoff but are dead (LXC VMID_REDACTED stopped/onboot=0, 9/9 receivers dispatch direct). *(Verdict note: the cited `gateway.mode` file is stale `oc-cc` from 2026-03-11; dormancy confirmed via the proper receiver-wiring + retirement-doc signals — conclusion holds.)*
+- **Fix:** No correctness fix. Optional: DORMANT-flag the OpenClaw handoff fields; add charter-vs-actual divergence observability. **effort: low · risk: low · orchestrator-dependent: yes**
+
+### Guardrails — layered defense — B
+- **OpenAI principle:** Layered stack — relevance classifier, safety/jailbreak classifier, PII filter, moderation, tool safeguards (low/med/high → pause/escalate), rules blocklist, output validation. Conservative thresholds; layered over any single mechanism.
+- **Live evidence:** Tool safeguards (the centerpiece) are strongest: `classify-session-risk.py` MUTATION/IRREVERSIBLE/SOFT_REVERSIBLE/CONSERVATIVE_REMEDIATION/P0_HOSTS/READ_ONLY/infragraph-signal patterns → 3-band AUTO/AUTO_NOTICE/POLL_PAUSE, fail-closed via RISK_FAIL_CLOSED, audited. Safety classifier live: `jailbreak_detector.py` 5 categories EN+Greek, wired inline (~L691-719) forcing HIGH. Output validation **exceeds spec**: Prepare Result carries 10 credential + 6 PII regexes and actively rewrites to `[CREDENTIAL REDACTED]`. Rules blocklist exists in `unified-guard.sh` (destructive/exfil/injection/credential-file, allow/reject_content/deny). **Critical gap:** unified-guard NOT in `dispatched-session-settings.json` (grep=0); the only PreToolUse blocker is `territory-gate.py` (CLAUDE.md ack, 0 destructive-command matching). Runner = 12× `--dangerously-skip-permissions`. Dispatched sessions cd into IaC/product repos that have **no** `.claude/settings.json` at all → even main's unified-guard never reaches the autonomous path. No relevance or moderation classifier; intermediate rail "Never blocks".
+- **Gap to A:** Layered stack not enforced on the highest-risk autonomous path; no relevance/moderation classifier; semantic rail ships dark; per-tool risk is plan-text-inferred not a declarative registry.
+- **Fix:** Wire `unified-guard.sh` into `dispatched-session-settings.json` PreToolUse (must live in `--settings` — dispatched repos have no project settings); promote Check Intermediate Rail to block obviously off-scope/malicious input; add a declarative per-MCP-tool risk registry (low/med/high → needs_approval). **effort: low · risk: med · orchestrator-dependent: yes**
+
+### Human-intervention design — B
+- **OpenAI principle:** *Plan for human intervention* — two co-equal escalation triggers: (1) exceeding failure thresholds (retries/actions limits → escalate), (2) high-risk/irreversible actions → human oversight until reliability confidence grows.
+- **Live evidence:** **Trigger 2 (high-risk) is A-grade:** `_assign_bands()` 3 bands; IRREVERSIBLE_PATTERNS (mkfs/wipefs/dd-of/terraform destroy) force POLL_PAUSE; floor signals can never co-occur with auto (enforced in band logic + band-aware `audit-risk-decisions.sh:100-121`); `/alert-session` SMS live (`alertmanager-twilio-bridge.py:180/239/253`); both sentinels present (Jun 16); re-fire cooldown nodes (30s gate) live. **Trigger 1 (failure thresholds) is PARTIAL:** MAX_SESSION_COST=5 / toolCallCount>75 only prepend a warning + emit flags in the **Parse Response** node — zero downstream IF/Switch branches on them (no band change, pause, or SMS); BUDGET_EXCEEDED only skips RAG injection; `handoff_depth.py` (POLL≥5/halt≥10) has 0 references in any workflow = dormant; the one retry loop is quality self-correction, no human escalation.
+- **Gap to A:** Only 1 of 2 co-equal triggers reaches a human — cost/tool-call/handoff-depth limits annotate but never page or pause.
+- **Fix:** On `costExceeded || toolCallLimitExceeded` force band=POLL_PAUSE + fire `/alert-session`; wire `handoff_depth.read_depth()` into dispatch to convert should_poll/should_halt into `[POLL]`+SMS; add a per-issue_id retry counter (cooldown state dir exists) escalating after N re-fires. All reuse existing band/SMS/cooldown plumbing. **effort: med · risk: med · orchestrator-dependent: yes**
+
+### Optimistic execution + tripwires — C
+- **OpenAI principle:** Guardrails run in parallel to agents, raising a tripwire/exception that interrupts the in-flight agent (SDK shape: GuardrailFunctionOutput(tripwire_triggered=True)) — contrasted with blocking-serial pre-checks.
+- **Live evidence:** Rails are strictly serial/pre-flight: Build Plan→Check Intermediate Rail→Classify Risk→Commit Prediction→Build Prompt→Launch Claude→Wait. The output-guardrail analog is inert (`intermediate_rail.py:6` "DARK-FIRST... does NOT block"; node wraps probe in catch-never-raise; event_log intermediate_rail_check = 1 row ever). Progress Poller is purely passive (`kill -0` liveness only, posts m.notice, zero kill/abort logic, no abort sentinel). The genuinely OpenAI-aligned layer is per-tool PreToolUse (NOT a trajectory tripwire): `unified-guard.sh:8` cites "OpenAI Agents SDK ToolGuardrailFunctionOutput (allow|reject_content|deny)" exit 2; `territory-gate.py` exit 2 fail-closed; live event_log tool_guardrail_rejection = 46. On this branch unified-guard's PreToolUse block is removed (git diff vs main); dispatched settings wire only territory-gate + snapshot.
+- **Gap to A:** No async guardrail watches the live trajectory and aborts on semantic/topic/jailbreak breach mid-flight; the only enforcement is launch-time band gating + per-action hard-blocks (interrupts at permission granularity, not the parallel-tripwire model).
+- **Fix:** Give the concurrent poller teeth — run jailbreak_detector + intermediate_rail over the JSONL tail it already reads, and on breach write `/tmp/claude-abort-<ID>` that the Wait loop checks and `kill`s $PID (the inject-file path already exists); restore unified-guard as a dispatched PreToolUse hook; emit a guardrail_tripwire metric. Keep the prediction-gate serial. **effort: med · risk: med · orchestrator-dependent: yes**
+
+### Iterative deployment discipline — A
+- **OpenAI principle:** Start minimal → validate with real users → grow capabilities; build guardrails from identified risks, add more as new vulnerabilities surface (layered, failure-driven loop).
+- **Live evidence:** Staggered staged enablement via sentinels (autonomy_forward Jun 16, conservative_remediation/territory_gate Jun 25, infragraph_autofold Jun 24); GEPA dormant-by-default (`gepa_generator.py:29`), rail dark-first; infragraph Phase A advisory/fail-open→B shadow→C per-rule approval. Guardrails from real failures: incident-named QA suites (test-709 "regress-proof the 2026-04-23 collision that left NL ASA Tunnel5 stuck admin-down"); autonomy-forward 3-band redesign driven by the ~56%-stranded production failure; 39-fixture jailbreak corpus (7 categories, 8 Greek) from the NVIDIA-DLI audit. The loop runs: QA nightly `30 4`, jailbreak weekly `0 5 * * 3`, metrics `*/30`; latest scorecard 757 pass / 2 fail / 99.47%; Welch t-test promotion gate (≥15 samples, lift≥0.05, p<0.1); first live Tier-2 auto-resolve (-1117) verified before trust.
+- **Gap to A:** None material. Operator-of-one validation signal (narrow; per-vote ledger lapsed 2026-05-07); a few dark stages without quantified graduation thresholds; 2-3 tolerated persistent QA fails. *(Verdict note: gap-analysis overstated GEPA as "~2 months dark" — it was ~5 days old at audit; only the intermediate rail is genuinely ~2 months dark. Errors soften, not strengthen, the gap.)*
+- **Fix:** Document an explicit graduation gate per dark component; tag the 2-3 persistent QA fails with YouTrack issues + expiry; restore a lightweight real-signal feedback channel. **effort: low · risk: low · orchestrator-dependent: no**
+
+## 3. To-A Backlog — Ranked by ROI (A-lift ÷ effort)
+
+| Rank | Dimension | Fix | A-lift | Effort | Risk | Orch-dep | ROI |
+|---|---|---|---|---|---|---|---|
+| 1 | **Model selection discipline** | Replace pipe-count proxy with `PRIOR_INCIDENTS:<n>` + add model-selection eval-set + holistic assertion | **D→A** (3 bands) | low | low | no | **Highest** — only D on the board, one-line bug + one eval |
+| 2 | **Guardrails — layered defense** | Wire `unified-guard.sh` into `dispatched-session-settings.json` PreToolUse | B→A | low | med | yes | High — protects the `--dangerously-skip-permissions` autonomous path |
+| 3 | **Single-vs-multi-agent** | Add `--agents` to Launch/resume/fresh nodes + reachability invariant | B→A | low | med | yes | High — activates 0/331 dead delegation surface |
+| 4 | **Optimistic execution + tripwires** | Give poller kill authority (abort sentinel) + restore dispatched unified-guard | C→A | med | med | yes | Med-high — C→A but med effort |
+| 5 | **Human-intervention design** | Force POLL_PAUSE+SMS on cost/tool-call/handoff-depth breach | B→A | med | med | yes | Med — wires Trigger 1's missing escalation half |
+| 6 | **Tool design** | pyyaml frontmatter parse so agent descriptions round-trip | A→A+ | low | low | no | Polish — already A |
+| 7 | **Instruction quality** | Add injected-body == SKILL.md parity QA guard | A→A | low | low | yes | Polish — future-drift insurance |
+| 8 | **Iterative deployment** | Document dark-component graduation gates + ticket QA fails | A→A | low | low | no | Polish |
+| 9 | **When-to-build fit** | Optional recovery-confirm pre-check for read-only confirm-close tail | A→A | low | low | no | Cost-trim, not grade |
+| 10 | **Orchestration pattern fit** | DORMANT-flag OpenClaw handoff fields + charter-vs-actual observability | A→A | low | low | yes | Polish |
+
+**Highest-ROI cluster:** Ranks 1-3 are all `low` effort and lift two B's and the lone D up to A — fixing them alone moves the overall grade decisively.
+
+## 4. Overall Grade
+
+**Overall: B+ (7 of 10 dimensions at A or B; 1 C; 1 D).**
+
+- **A: 5** — When-to-build fit, Tool design, Instruction quality, Orchestration pattern fit, Iterative deployment discipline.
+- **B: 3** — Single-vs-multi-agent, Guardrails (layered defense), Human-intervention design.
+- **C: 1** — Optimistic execution + tripwires.
+- **D: 1** — Model selection discipline.
+
+**Below-A count: 5 of 10.** The honest read: the gateway's *judgment placement, orchestration shape, instruction fidelity, and grow-and-harden loop are genuinely strong (A-grade)*. The drag is concentrated in three structurally-similar wiring failures — capability **coded but not reaching the live dispatched runtime**: model downshift defeated by a proxy bug (D), the rules blocklist absent from the autonomous path (B), and the sub-agent roster unreachable in the dispatched cwd (B). All three are `low`-effort fixes. The genuine *design* gap is the missing concurrent tripwire (C). Every finding traces to OpenAI's *A Practical Guide to Building Agents*; no Anthropic guidance was used.

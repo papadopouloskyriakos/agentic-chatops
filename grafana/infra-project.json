@@ -1,0 +1,974 @@
+{
+  "dashboard": {
+    "uid": "infra-project",
+    "title": "Infrastructure Alerts & Remediation",
+    "tags": [
+      "infrastructure",
+      "alerts",
+      "claude-gateway"
+    ],
+    "timezone": "browser",
+    "refresh": "1m",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "schemaVersion": 39,
+    "version": 0,
+    "panels": [
+      {
+        "id": 100,
+        "title": "Row 1: Active Alerts & Issues",
+        "type": "row",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "collapsed": false
+      },
+      {
+        "id": 1,
+        "title": "Active Alerts (NL)",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 1
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "orange",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_alerts_active{site=\"nl\"}",
+            "legendFormat": "NL Active"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Active Alerts (GR)",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 6,
+          "y": 1
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "orange",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_alerts_active{site=\"gr\"}",
+            "legendFormat": "GR Active"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Total Issues by State",
+        "type": "barchart",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 1
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              },
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "gradientMode": "none",
+              "axisCenteredZero": false,
+              "barAlignment": 0
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Open"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "InProgress"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "ToVerify"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "yellow"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Done"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "orientation": "horizontal",
+          "showValue": "always",
+          "barWidth": 0.8,
+          "groupWidth": 0.7,
+          "xTickLabelRotation": 0,
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"Open\"}",
+            "legendFormat": "NL Open",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"InProgress\"}",
+            "legendFormat": "NL InProgress",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"ToVerify\"}",
+            "legendFormat": "NL ToVerify",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"Done\"}",
+            "legendFormat": "NL Done",
+            "instant": true
+          },
+          {
+            "refId": "E",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"Open\"}",
+            "legendFormat": "GR Open",
+            "instant": true
+          },
+          {
+            "refId": "F",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"InProgress\"}",
+            "legendFormat": "GR InProgress",
+            "instant": true
+          },
+          {
+            "refId": "G",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"ToVerify\"}",
+            "legendFormat": "GR ToVerify",
+            "instant": true
+          },
+          {
+            "refId": "H",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"Done\"}",
+            "legendFormat": "GR Done",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 101,
+        "title": "Row 2: Remediation & MTTR",
+        "type": "row",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 7
+        },
+        "collapsed": false
+      },
+      {
+        "id": 4,
+        "title": "Remediation Success Rate",
+        "description": "Percentage of issues that reached Done state",
+        "type": "gauge",
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 0.5
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.7
+                },
+                {
+                  "color": "green",
+                  "value": 0.85
+                }
+              ]
+            },
+            "noValue": "N/A"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true,
+          "orientation": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_remediation_success{site=\"nl\"} / (sum(infra_issues_by_state{site=\"nl\"}) > 0 or vector(1))",
+            "legendFormat": "NL",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "infra_remediation_success{site=\"gr\"} / (sum(infra_issues_by_state{site=\"gr\"}) > 0 or vector(1))",
+            "legendFormat": "GR",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Mean Time to Resolve (MTTR)",
+        "description": "Average time from issue creation to Done state",
+        "type": "stat",
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "dtdurations",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3600
+                },
+                {
+                  "color": "orange",
+                  "value": 14400
+                },
+                {
+                  "color": "red",
+                  "value": 86400
+                }
+              ]
+            },
+            "noValue": "N/A"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "horizontal",
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_mttr_seconds{site=\"nl\"}",
+            "legendFormat": "NL MTTR",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "infra_mttr_seconds{site=\"gr\"}",
+            "legendFormat": "GR MTTR",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 102,
+        "title": "Row 3: Flaps & Timeline",
+        "type": "row",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 15
+        },
+        "collapsed": false
+      },
+      {
+        "id": 6,
+        "title": "Flap Count (NL)",
+        "description": "Total flap events across all NL alert entries",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3
+                },
+                {
+                  "color": "orange",
+                  "value": 10
+                },
+                {
+                  "color": "red",
+                  "value": 20
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_flap_total{site=\"nl\"}",
+            "legendFormat": "NL Flaps"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Flap Count (GR)",
+        "description": "Total flap events across all GR alert entries",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3
+                },
+                {
+                  "color": "orange",
+                  "value": 10
+                },
+                {
+                  "color": "red",
+                  "value": 20
+                }
+              ]
+            },
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_flap_total{site=\"gr\"}",
+            "legendFormat": "GR Flaps"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Alert Timeline",
+        "description": "Active alerts over time by site",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "lineInterpolation": "stepAfter",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": true,
+              "showPoints": "never",
+              "axisCenteredZero": false,
+              "axisLabel": "Alerts",
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_alerts_active{site=\"nl\"}",
+            "legendFormat": "NL Active"
+          },
+          {
+            "refId": "B",
+            "expr": "infra_alerts_active{site=\"gr\"}",
+            "legendFormat": "GR Active"
+          }
+        ]
+      },
+      {
+        "id": 103,
+        "title": "Row 4: Issues Distribution",
+        "type": "row",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 22
+        },
+        "collapsed": false
+      },
+      {
+        "id": 9,
+        "title": "Issues by State (NL)",
+        "description": "IFRNLLEI01PRD issue distribution",
+        "type": "piechart",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 23
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Open"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "InProgress"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "ToVerify"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "yellow"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Done"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "pieType": "donut",
+          "displayLabels": [
+            "name",
+            "value",
+            "percent"
+          ],
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "values": [
+              "value",
+              "percent"
+            ]
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"Open\"}",
+            "legendFormat": "Open",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"InProgress\"}",
+            "legendFormat": "InProgress",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"ToVerify\"}",
+            "legendFormat": "ToVerify",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "infra_issues_by_state{site=\"nl\",state=\"Done\"}",
+            "legendFormat": "Done",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Issues by State (GR)",
+        "description": "IFRGRSKG01PRD issue distribution",
+        "type": "piechart",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 23
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Open"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "InProgress"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "ToVerify"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "yellow"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Done"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "pieType": "donut",
+          "displayLabels": [
+            "name",
+            "value",
+            "percent"
+          ],
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "values": [
+              "value",
+              "percent"
+            ]
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"Open\"}",
+            "legendFormat": "Open",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"InProgress\"}",
+            "legendFormat": "InProgress",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"ToVerify\"}",
+            "legendFormat": "ToVerify",
+            "instant": true
+          },
+          {
+            "refId": "D",
+            "expr": "infra_issues_by_state{site=\"gr\",state=\"Done\"}",
+            "legendFormat": "Done",
+            "instant": true
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}

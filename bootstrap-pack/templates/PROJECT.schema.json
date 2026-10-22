@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project bootstrap PROJECT.json",
+  "type": "object",
+  "required": [
+    "slug",
+    "title",
+    "youtrack_prefix",
+    "matrix_room",
+    "primary_language",
+    "test_command",
+    "lint_command",
+    "bounded_contexts",
+    "max_parallel_workers",
+    "owners",
+    "risk_profile",
+    "surfaces"
+  ],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5
+    },
+    "youtrack_prefix": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "matrix_room": {
+      "type": "string",
+      "pattern": "^![A-Za-z0-9]+:.+$"
+    },
+    "primary_language": {
+      "type": "string"
+    },
+    "test_command": {
+      "type": "string"
+    },
+    "lint_command": {
+      "type": "string"
+    },
+    "ci_pipeline": {
+      "type": "string"
+    },
+    "bounded_contexts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "max_parallel_workers": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    },
+    "max_loc_per_worker": {
+      "type": "integer",
+      "minimum": 50,
+      "maximum": 5000
+    },
+    "owners": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "risk_profile": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "gitlab_project_id": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "surfaces": {
+      "type": "object",
+      "description": "Declares which contract artifacts the project produces. Default-strict: omitted = all true (validator FAILs).",
+      "required": [
+        "http_api",
+        "events",
+        "persistent_data"
+      ],
+      "properties": {
+        "http_api": {
+          "type": "boolean",
+          "description": "Project exposes HTTP endpoints; openapi.yaml required if true"
+        },
+        "events": {
+          "type": "boolean",
+          "description": "Project produces/consumes async events; asyncapi.yaml required if true"
+        },
+        "persistent_data": {
+          "type": "boolean",
+          "description": "Project persists data shapes; schemas/*.json required if true"
+        }
+      }
+    }
+  }
+}

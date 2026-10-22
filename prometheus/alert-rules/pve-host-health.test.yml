@@ -1,0 +1,188 @@
+# promtool test rules for pve-host-health.yml (2026-08-25; split 2026-08-26 into
+# pve-exporter-liveness + pve-host-pressure-local (canonical, per-site) and the
+# NL-only cluster-view group pve-exporter)
+#
+# Exercises the cluster-view dedup semantics: every live PVE host reports the
+# WHOLE cluster (/pve?cluster=1&node=0), so rules aggregate max by (id) /
+# max by (storage) across reporters. Fixtures assert:
+#   - PVENodeOffline fires for a down node but NEVER for node/nl-pve02
+#     (POWERED OFF by design) — and collapses across two reporters.
+#   - PVEOnbootGuestDown fires only for onboot=1 guests.
+#   - PVEStorageNearFull collapses per storage NAME across node views.
+#   - PVEExporterDown / PVEGuestNotBackedUp honour their for: durations.
+#
+# Run: scripts/qa/suites/test-726-prom-alert-rules.sh (promtool in the Prom pod)
+rule_files:
+  - pve-host-health.yml
+
+tests:
+  # ─── PVENodeOffline: down node fires, pve02 never, dedup across reporters ──
+  - interval: 1m
+    name: "PVENodeOffline fires for a down live node, never for nl-pve02"
+    input_series:
+      - series: 'pve_up{job="pve-exporter", id="node/gr-pve01", instance="nl-pve03"}'
+        values: '0+0x10'
+      - series: 'pve_up{job="pve-exporter", id="node/gr-pve01", instance="gr-pve02"}'
+        values: '0+0x10'
+      - series: 'pve_up{job="pve-exporter", id="node/nl-pve02", instance="nl-pve03"}'
+        values: '0+0x10'
+      - series: 'pve_up{job="pve-exporter", id="node/nlpve04", instance="nl-pve03"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PVENodeOffline
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: PVENodeOffline
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: pve-host
+              id: node/gr-pve01
+            exp_annotations:
+              summary: "PVE node/gr-pve01 reports offline in /cluster/resources"
+              description: "A live PVE cluster member is offline as seen by the surviving pve-exporter reporters (max by id across all 5). nl-pve02 is excluded (POWERED OFF by design, IFRNLLEI01PRD-2646). During an NL-GR partition the remote site nodes WILL show offline — correlate with IntersiteBGPLegDown."
+
+  # ─── PVEOnbootGuestDown: onboot=1 && down fires; onboot=0 && down does not ──
+  - interval: 1m
+    name: "PVEOnbootGuestDown fires only for onboot guests"
+    input_series:
+      - series: 'pve_up{job="pve-exporter", id="qemu/VMID_REDACTED", instance="nl-pve03"}'
+        values: '0+0x20'
+      - series: 'pve_onboot_status{job="pve-exporter", id="qemu/VMID_REDACTED", instance="nl-pve03"}'
+        values: '1+0x20'
+      - series: 'pve_up{job="pve-exporter", id="lxc/VMID_REDACTED", instance="nl-pve03"}'
+        values: '0+0x20'
+      - series: 'pve_onboot_status{job="pve-exporter", id="lxc/VMID_REDACTED", instance="nl-pve03"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: PVEOnbootGuestDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: pve-host
+              id: qemu/VMID_REDACTED
+            exp_annotations:
+              summary: "onboot guest qemu/VMID_REDACTED is not running"
+              description: "A guest with onboot=1 has been down >15m — after a host recovery this is the half-recovered-boot signature (cf. gr-pve01 2026-08-25: 36/36 onboot guests had to come back). Resolve the name via pve_guest_info on this id."
+
+  # ─── PVEStorageNearFull: collapses per storage name across two node views ──
+  - interval: 1m
+    name: "PVEStorageNearFull collapses per storage name"
+    input_series:
+      - series: 'pve_disk_usage_bytes{job="pve-exporter", id="storage/nlpve04/nlpbs01", instance="nlpve04"}'
+        values: '90+0x40'
+      - series: 'pve_disk_size_bytes{job="pve-exporter", id="storage/nlpve04/nlpbs01", instance="nlpve04"}'
+        values: '100+0x40'
+      - series: 'pve_storage_info{job="pve-exporter", id="storage/nlpve04/nlpbs01", instance="nlpve04", storage="nlpbs01", node="nlpve04"}'
+        values: '1+0x40'
+      - series: 'pve_disk_usage_bytes{job="pve-exporter", id="storage/nl-pve01/nlpbs01", instance="nl-pve01"}'
+        values: '90+0x40'
+      - series: 'pve_disk_size_bytes{job="pve-exporter", id="storage/nl-pve01/nlpbs01", instance="nl-pve01"}'
+        values: '100+0x40'
+      - series: 'pve_storage_info{job="pve-exporter", id="storage/nl-pve01/nlpbs01", instance="nl-pve01", storage="nlpbs01", node="nl-pve01"}'
+        values: '1+0x40'
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: PVEStorageNearFull
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: pve-host
+              storage: nlpbs01
+            exp_annotations:
+              summary: "PVE storage nlpbs01 above 85% (90%)"
+              description: "Collapsed per storage NAME across nodes (shared storages alert once; for local storages the LibreNMS per-device disk rule names the exact host). At rollout 2026-08-25 nlpbs01 and nlpvecl01-nfs were already at 85.7% — known finding."
+      - eval_time: 31m
+        alertname: PVEStorageCriticallyFull
+        exp_alerts: []
+
+  # ─── PVEExporterDown: for 5m ──
+  - interval: 1m
+    name: "PVEExporterDown fires after 5m"
+    input_series:
+      - series: 'up{job="pve-exporter", instance="gr-pve02"}'
+        values: '0+0x10'
+      - series: 'up{job="pve-exporter", instance="nl-pve03"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PVEExporterDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PVEExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: pve-host
+              job: pve-exporter
+              instance: gr-pve02
+            exp_annotations:
+              summary: "gr-pve02 prometheus-pve-exporter (:9221) is down"
+              description: "The native pve-exporter on this PVE host stopped answering. Its scrape doubles as the API/pmxcfs responsiveness canary of that host. Runbook: claude-gateway docs/runbooks/pve-host-exporters.md (re-run scripts/pve-host-exporters-install.sh --check)."
+
+  # ─── PVEGuestNotBackedUp: for 6h, value substituted in summary ──
+  - interval: 5m
+    name: "PVEGuestNotBackedUp fires after 6h"
+    input_series:
+      - series: 'pve_not_backed_up_total{job="pve-exporter", instance="nl-pve03"}'
+        values: '9+0x80'
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: PVEGuestNotBackedUp
+        exp_alerts: []
+      - eval_time: 6h5m
+        alertname: PVEGuestNotBackedUp
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              service: pve-host
+            exp_annotations:
+              summary: "9 PVE guests are in no vzdump/PBS backup job"
+              description: "The cluster backup-info endpoint reports guests outside every backup job for >6h. List them via pve_not_backed_up_info. Known rollout state 2026-08-25: 9 guests. Place guests by LIVE node, never by VMID digits (memory: unbacked_guests_added_to_vzdump_20260803)."
+
+  # ─── PVELoadHigh: the / on (instance) fix actually matches (was 0 series) ──
+  - interval: 1m
+    name: "PVELoadHigh fires with the on(instance) matching fix"
+    input_series:
+      - series: 'node_load5{job="pve-node-exporter", instance="gr-pve01"}'
+        values: '4+0x20'
+      - series: 'node_cpu_seconds_total{mode="idle", job="pve-node-exporter", instance="gr-pve01", cpu="0"}'
+        values: '100+50x20'
+      - series: 'node_cpu_seconds_total{mode="idle", job="pve-node-exporter", instance="gr-pve01", cpu="1"}'
+        values: '100+50x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PVELoadHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: "2"
+              service: pve-host
+              instance: gr-pve01
+            exp_annotations:
+              summary: "gr-pve01 5-min load avg above 1.5 cores per CPU for >10min"
+              description: "Sustained CPU saturation or I/O wait. Often correlates with DRBD replication backlog or guest disk thrashing — but if CPU is IDLE while load is high, suspect the pmxcfs wedge (see the pve-pmxcfs-wedge rules on NL). Check top, iostat -x 5 5."
+
+  # ─── PVEMemoryPressureHigh: job-scoped form fires at >85% ──
+  - interval: 1m
+    name: "PVEMemoryPressureHigh fires at 90% used"
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{job="pve-node-exporter", instance="nlpve04"}'
+        values: '10+0x20'
+      - series: 'node_memory_MemTotal_bytes{job="pve-node-exporter", instance="nlpve04"}'
+        values: '100+0x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PVEMemoryPressureHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: "1"
+              service: pve-host
+              job: pve-node-exporter
+              instance: nlpve04
+            exp_annotations:
+              summary: "nlpve04 memory >85% used for >10min (90%)"
+              description: "PVE host memory pressure rising — guests on this node degrade before the host itself pages (ref: 2026-04-27 HAHA cascade; 2026-08-25 nlpve04 host-OOM killed nlk8s-node01). Check free -h and the top guests via pvesh get /cluster/resources; rebalance or stop non-critical guests."

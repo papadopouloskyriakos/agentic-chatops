@@ -1,0 +1,61 @@
+# Inter-site (NL<->GR) iBGP leg health alerts — test+doc mirror.
+#
+# Deployed truth:
+#   infrastructure/nl/production/k8s/namespaces/monitoring/intersite-bgp-alerts.tf
+# When adding / changing / removing an alert, edit BOTH files.
+#
+# Metric source: scripts/bgp-mesh-watchdog.sh (cron */5 on nl-claude01)
+#   -> /var/lib/node_exporter/textfile_collector/bgp_mesh_watchdog.prom
+#
+# Legs (iBGP over IPsec VTI):
+#   budget : nlrtr01 Tunnel1 (10.255.200.X) <-> gr-fw01 vti-nl (10.255.200.X)
+#   freedom: nl-fw01 Tunnel4 vti-gr-f (10.255.200.X) <-> gr-fw01 vti-gr (10.255.200.X)
+# Alerts key on the NL-side vantage — polled NL-locally, so it survives a
+# partition; the GR-side series ride the public OOB path.
+#
+# Background: 2026-08-08 freedom-leg wedge (19.5h silent) + budget-leg
+# degradation = ~7h partition + 1,140 LibreNMS reminder emails. 4th
+# occurrence of the silent-first-leg pattern. ASA 9.16(4) rejects BFD on
+# VTI (verified live), so detection-by-alert is the durable control.
+# Memory: memory/intersite_tunnel_degradation_email_flood_20260808.md
+
+groups:
+  - name: intersite-bgp-health
+    interval: 1m
+    rules:
+      - alert: IntersiteBGPLegDown
+        expr: bgp_session_state{local_host=~"nlrtr01|nl-fw01",neighbor=~"10\\.255\\.200\\.(1|11)"} == 0
+        for: 10m
+        labels:
+          severity: critical
+          category: bgp-intersite
+        annotations:
+          summary: "Inter-site BGP leg down: {{ $labels.local_host }} -> {{ $labels.neighbor }} not Established for 10+ min"
+          description: "The {{ if eq $labels.neighbor \"10.255.200.X\" }}budget (nlrtr01 Tunnel1 <-> gr-fw01 vti-nl){{ else }}freedom (nl-fw01 Tunnel4 vti-gr-f <-> gr-fw01 vti-gr){{ end }} inter-site leg is down. Cross-site redundancy is reduced to ONE leg — historically the second leg fails 19-40h later and partitions the sites (corosync cluster eu-nlgr-pvecl01 rides these tunnels). Check for the wedged-SA signature: 'show crypto ikev2 sa' READY but VTI ping dead and no child SA in 'show crypto ipsec sa peer'. Proven fix 2026-08-08: 'vpn-sessiondb logoff ipaddress <peer-wan-ip> noconfirm' on the NL ASA (or SA bounce on the initiator side) forces clean renegotiation. Memory: intersite_tunnel_degradation_email_flood_20260808.md."
+      - alert: IntersiteBGPPartition
+        expr: sum(bgp_session_state{local_host=~"nlrtr01|nl-fw01",neighbor=~"10\\.255\\.200\\.(1|11)"}) == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: bgp-intersite
+        annotations:
+          summary: "Inter-site PARTITION: both NL<->GR BGP legs down for 5+ min"
+          description: "Both the budget (rtr01) and freedom (nl-fw01) inter-site legs are down simultaneously — NL and GR are partitioned for site prefixes (they cannot transit the VPS spokes: iBGP split-horizon). Expect corosync knet loss to gr-pve01/02, GR quorum loss, cross-site LibreNMS device-down storms both ways. Diagnose per-leg (wedged SA vs WAN loss) and bounce the wedged SA first. Memory: intersite_tunnel_degradation_email_flood_20260808.md."
+      - alert: BGPMeshSessionsMissing
+        expr: bgp_mesh_missing_count > 0
+        for: 30m
+        labels:
+          severity: warning
+          category: bgp-intersite
+        annotations:
+          summary: "{{ $value }} iBGP mesh session(s) missing for 30+ min"
+          description: "bgp-mesh-watchdog.sh reports {{ $value }} of the 52 expected iBGP sessions not Established for 30+ min. Check bgp_session_state{} == 0 series to identify which (local_host, neighbor) pairs are down, then diagnose the corresponding tunnel/host."
+      - alert: BGPMeshWatchdogStale
+        expr: (time() - bgp_mesh_last_run_timestamp) > 1800 or absent(bgp_mesh_last_run_timestamp)
+        for: 5m
+        labels:
+          severity: warning
+          category: bgp-intersite
+        annotations:
+          summary: "bgp-mesh-watchdog metrics stale for 30+ min — inter-site BGP alerting is blind"
+          description: "bgp_mesh_watchdog.prom on nl-claude01 has not refreshed for 30+ min (cron */5 — 6 missed cycles) or the metric is absent. IntersiteBGPLegDown / IntersiteBGPPartition cannot fire while this persists. Check the app-user cron, scripts/bgp-mesh-watchdog.sh, and node_exporter textfile collection on nl-claude01."

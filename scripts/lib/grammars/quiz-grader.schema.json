@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.net/schemas/quiz-grader.schema.json",
+  "title": "Quiz grader output (IFRNLLEI01PRD-749 / G2.P1.1)",
+  "description": "Constrains gemma3:12b output for scripts/lib/quiz_grader.py. Passed as `format` to Ollama when OLLAMA_USE_GRAMMAR=1; falls back to format=json on error.",
+  "type": "object",
+  "required": [
+    "score_0_to_1",
+    "feedback",
+    "bloom_demonstrated",
+    "citation_check",
+    "grader_confidence"
+  ],
+  "properties": {
+    "score_0_to_1": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Quality of the answer on a 0-to-1 scale. Mapped to SM-2 quality via round(score*5)."
+    },
+    "feedback": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "Free-text feedback citing source snippets. Must not invent content."
+    },
+    "bloom_demonstrated": {
+      "type": "string",
+      "enum": [
+        "recall",
+        "recognition",
+        "explanation",
+        "application",
+        "analysis",
+        "evaluation",
+        "teaching_back"
+      ],
+      "description": "Highest Bloom's-taxonomy level the answer demonstrates."
+    },
+    "citation_check": {
+      "type": "object",
+      "required": ["uses_source", "fabricated_content"],
+      "properties": {
+        "uses_source": {"type": "boolean"},
+        "fabricated_content": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "clarifying_question": {
+      "type": ["string", "null"],
+      "maxLength": 500,
+      "description": "If grader_confidence < 0.6, MUST be a non-empty question. Forces the operator to clarify before SM-2/Bloom advance."
+    },
+    "grader_confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Self-reported grader confidence. Below 0.6 freezes mastery progression."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,505 @@
+{
+    "id": "osv5EJJWGsTETw18",
+    "name": "NL - Synology DSM Alert Receiver",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "id": "wh1",
+            "name": "Webhook Trigger",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                0,
+                0
+            ],
+            "parameters": {
+                "path": "synology-alert",
+                "httpMethod": "POST",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "webhookId": "synology-alert"
+        },
+        {
+            "id": "rok",
+            "name": "Respond OK",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                220,
+                0
+            ],
+            "parameters": {
+                "respondWith": "text",
+                "responseBody": "OK"
+            }
+        },
+        {
+            "id": "parse",
+            "name": "Parse DSM Alert",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                440,
+                0
+            ],
+            "parameters": {
+                "jsCode": "const d=$('Respond OK').first().json;\nconst body=(d.body&&typeof d.body==='object')?d.body:{};\nconst query=d.query||{};\n\n// Detect unresolved DSM template vars (%%VAR%% or %VAR%)\nconst isTemplate=(v)=>!v||/^%{1,2}[A-Za-z_]+%{1,2}$/.test(v.trim());\n\n// 1. Hostname \u2014 hardcoded in DSM webhook config, always correct\nconst hostname=body.hostname||body.host||'unknown-synology';\n\n// 2. Raw fields from body\nconst rawEvent=body.event||body.title||body.subject||'';\nconst rawMessage=body.message||body.text||'';\nconst rawSeverity=(body.severity||body.level||'').toString();\nconst rawCategory=(body.category||body.type||'').toString();\n\n// 3. query.text fallback (nl-nas01 puts actual text here)\nconst queryText=query.text||'';\n\n// 4. Best available actual message\nlet actualMessage='';\nif(!isTemplate(rawMessage)&&rawMessage.length>5){\n  actualMessage=rawMessage;\n}else if(queryText){\n  actualMessage=queryText;\n}else{\n  actualMessage=rawMessage;\n}\n\n// 5. Parse event/subject when template var or missing\nlet event=rawEvent;\nif(isTemplate(event)||!event){\n  const qm=queryText.match(/^\\[.*?\\]\\s*(.+)/);\n  if(qm){\n    event=qm[1].trim();\n  }else if(actualMessage){\n    const stripped=actualMessage.replace(/^\\[.*?\\]\\s*/,'');\n    const lines=stripped.split('\\n').map(l=>l.trim()).filter(l=>l);\n    const meaningful=lines.filter(l=>!/^A new system event occurred/.test(l));\n    event=meaningful.length>0?meaningful[0]:lines[lines.length-1]||'DSM Alert';\n  }else{\n    event='DSM Alert';\n  }\n}\n\n// 6. Infer severity when template var\nlet severity=rawSeverity.toLowerCase();\nif(isTemplate(rawSeverity)||!rawSeverity){\n  const ml=(actualMessage+' '+event).toLowerCase();\n  if(/critical|emergency|crash|failure|degrad/.test(ml))severity='critical';\n  else severity='warning';\n}\n\n// 7. Infer category when template var\nlet category=rawCategory;\nif(isTemplate(rawCategory)||!rawCategory){\n  const ml=(actualMessage+' '+event).toLowerCase();\n  if(/security|risk|login|firewall/.test(ml))category='Security';\n  else if(/disk|smart|volume|storage|raid/.test(ml))category='Storage';\n  else if(/iscsi/.test(ml))category='iSCSI';\n  else if(/network|interface|link/.test(ml))category='Network';\n  else if(/ups|power|battery/.test(ml))category='Power/UPS';\n  else if(/backup|snapshot/.test(ml))category='Backup';\n  else if(/update|dsm|package|out-of-date/.test(ml))category='Update';\n  else category='System';\n}\n\n// 8. Urgency from severity + message content\nconst isActionable=severity!=='info';\nconst ml=(actualMessage+' '+event).toLowerCase();\nlet urgency='normal';\nif(severity==='critical')urgency='critical';\nelse if(/i.o.latency|degraded|crashed|disk.failure|disk.error|bad.sector/.test(ml))urgency='high';\nelse if(/smart.+warning|ups.+(battery|power)|iscsi.+(disconnect|error)/.test(ml))urgency='high';\nelse if(/raid.+degrad|volume.+crash/.test(ml))urgency='critical';\n\n// 9. Format output\nconst displayMsg=actualMessage.replace(/^\\[.*?\\]\\s*/,'').replace(/\\n/g,' ').trim().substring(0,300);\nconst em=urgency==='critical'?'\\ud83d\\udd34':urgency==='high'?'\\ud83d\\udfe0':'\\ud83d\\udfe1';\nconst pb=em+' [Synology DSM] '+event+'\\nHost: '+hostname+'\\nCategory: '+category+'\\nSeverity: '+severity+(displayMsg&&displayMsg!==event?'\\nDetails: '+displayMsg:'');\nconst hb='<b>'+em+' [Synology DSM] '+event+'</b><br/>Host: <code>'+hostname+'</code><br/>Category: '+category+'<br/>Severity: <code>'+severity+'</code>'+(displayMsg&&displayMsg!==event?'<br/>Details: '+displayMsg:'');\nreturn[{json:{hostname,event,message:actualMessage,severity,category,isActionable,urgency,plainBody:pb,htmlBody:hb,matrixBody:JSON.stringify({msgtype:urgency==='normal'?'m.notice':'m.text',body:pb,format:'org.matrix.custom.html',formatted_body:hb}),safeHostname:hostname.replace(/[^a-zA-Z0-9._-]/g,''),safeEvent:event.replace(/[^a-zA-Z0-9 _-]/g,'').substring(0,50)}}];"
+            }
+        },
+        {
+            "id": "is-actionable",
+            "name": "Is Actionable?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                660,
+                0
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true
+                    },
+                    "conditions": [
+                        {
+                            "id": "chk1",
+                            "leftValue": "={{ $json.isActionable }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            }
+        },
+        {
+            "id": "post-matrix",
+            "name": "Post to Matrix",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                880,
+                0
+            ],
+            "parameters": {
+                "method": "PUT",
+                "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/dsm-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json.matrixBody }}"
+            },
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "REDACTED_MATRIX_CRED",
+                    "name": "Matrix Claude Bot"
+                }
+            }
+        },
+        {
+            "id": "is-high",
+            "name": "Is High Urgency?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                1100,
+                0
+            ],
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true
+                    },
+                    "conditions": [
+                        {
+                            "id": "chk2",
+                            "leftValue": "={{ $('Parse DSM Alert').first().json.urgency }}",
+                            "rightValue": "normal",
+                            "operator": {
+                                "type": "string",
+                                "operation": "notEquals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            }
+        },
+        {
+            "id": "triage-instr",
+            "name": "Post Triage Instruction",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                1320,
+                -100
+            ],
+            "parameters": {
+                "authentication": "privateKey",
+                "command": "={{ '/app/claude-gateway/scripts/run-triage.sh infra ' + ' ' + JSON.stringify(($('Parse DSM Alert').first().json.safeHostname) || '') + ' ' + JSON.stringify(('DSM: ' + $('Parse DSM Alert').first().json.safeEvent) || '') + ' ' + JSON.stringify(($('Parse DSM Alert').first().json.severity) || '') }}",
+                "options": {}
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            },
+            "continueOnFail": true,
+            "onError": "continueRegularOutput"
+        }
+    ],
+    "connections": {
+        "Webhook Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Respond OK",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Respond OK": {
+            "main": [
+                [
+                    {
+                        "node": "Parse DSM Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse DSM Alert": {
+            "main": [
+                [
+                    {
+                        "node": "Is Actionable?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is Actionable?": {
+            "main": [
+                [
+                    {
+                        "node": "Post to Matrix",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Post to Matrix": {
+            "main": [
+                [
+                    {
+                        "node": "Is High Urgency?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is High Urgency?": {
+            "main": [
+                [
+                    {
+                        "node": "Post Triage Instruction",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "saveDataErrorExecution": "all",
+        "saveDataSuccessExecution": "all",
+        "saveManualExecutions": true,
+        "saveExecutionProgress": true,
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "18603522-d265-427c-9189-dce3433007a7",
+    "activeVersionId": "18603522-d265-427c-9189-dce3433007a7",
+    "versionCounter": 18,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-03-18T13:15:03.176Z",
+            "createdAt": "2026-03-18T13:15:03.176Z",
+            "role": "workflow:owner",
+            "workflowId": "osv5EJJWGsTETw18",
+            "projectId": "CLDM2Ezgw9101HuF",
+            "project": {
+                "updatedAt": "2025-01-28T17:38:17.181Z",
+                "createdAt": "2025-01-28T17:31:03.531Z",
+                "id": "CLDM2Ezgw9101HuF",
+                "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-03-28T11:23:39.571Z",
+        "createdAt": "2026-03-28T11:23:39.571Z",
+        "versionId": "18603522-d265-427c-9189-dce3433007a7",
+        "workflowId": "osv5EJJWGsTETw18",
+        "nodes": [
+            {
+                "id": "wh1",
+                "name": "Webhook Trigger",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2,
+                "position": [
+                    0,
+                    0
+                ],
+                "parameters": {
+                    "path": "synology-alert",
+                    "httpMethod": "POST",
+                    "responseMode": "responseNode",
+                    "options": {}
+                },
+                "webhookId": "synology-alert"
+            },
+            {
+                "id": "rok",
+                "name": "Respond OK",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1,
+                "position": [
+                    220,
+                    0
+                ],
+                "parameters": {
+                    "respondWith": "text",
+                    "responseBody": "OK"
+                }
+            },
+            {
+                "id": "parse",
+                "name": "Parse DSM Alert",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    440,
+                    0
+                ],
+                "parameters": {
+                    "jsCode": "const d=$('Respond OK').first().json;\nconst body=(d.body&&typeof d.body==='object')?d.body:{};\nconst query=d.query||{};\n\n// Detect unresolved DSM template vars (%%VAR%% or %VAR%)\nconst isTemplate=(v)=>!v||/^%{1,2}[A-Za-z_]+%{1,2}$/.test(v.trim());\n\n// 1. Hostname \u2014 hardcoded in DSM webhook config, always correct\nconst hostname=body.hostname||body.host||'unknown-synology';\n\n// 2. Raw fields from body\nconst rawEvent=body.event||body.title||body.subject||'';\nconst rawMessage=body.message||body.text||'';\nconst rawSeverity=(body.severity||body.level||'').toString();\nconst rawCategory=(body.category||body.type||'').toString();\n\n// 3. query.text fallback (nl-nas01 puts actual text here)\nconst queryText=query.text||'';\n\n// 4. Best available actual message\nlet actualMessage='';\nif(!isTemplate(rawMessage)&&rawMessage.length>5){\n  actualMessage=rawMessage;\n}else if(queryText){\n  actualMessage=queryText;\n}else{\n  actualMessage=rawMessage;\n}\n\n// 5. Parse event/subject when template var or missing\nlet event=rawEvent;\nif(isTemplate(event)||!event){\n  const qm=queryText.match(/^\\[.*?\\]\\s*(.+)/);\n  if(qm){\n    event=qm[1].trim();\n  }else if(actualMessage){\n    const stripped=actualMessage.replace(/^\\[.*?\\]\\s*/,'');\n    const lines=stripped.split('\\n').map(l=>l.trim()).filter(l=>l);\n    const meaningful=lines.filter(l=>!/^A new system event occurred/.test(l));\n    event=meaningful.length>0?meaningful[0]:lines[lines.length-1]||'DSM Alert';\n  }else{\n    event='DSM Alert';\n  }\n}\n\n// 6. Infer severity when template var\nlet severity=rawSeverity.toLowerCase();\nif(isTemplate(rawSeverity)||!rawSeverity){\n  const ml=(actualMessage+' '+event).toLowerCase();\n  if(/critical|emergency|crash|failure|degrad/.test(ml))severity='critical';\n  else severity='warning';\n}\n\n// 7. Infer category when template var\nlet category=rawCategory;\nif(isTemplate(rawCategory)||!rawCategory){\n  const ml=(actualMessage+' '+event).toLowerCase();\n  if(/security|risk|login|firewall/.test(ml))category='Security';\n  else if(/disk|smart|volume|storage|raid/.test(ml))category='Storage';\n  else if(/iscsi/.test(ml))category='iSCSI';\n  else if(/network|interface|link/.test(ml))category='Network';\n  else if(/ups|power|battery/.test(ml))category='Power/UPS';\n  else if(/backup|snapshot/.test(ml))category='Backup';\n  else if(/update|dsm|package|out-of-date/.test(ml))category='Update';\n  else category='System';\n}\n\n// 8. Urgency from severity + message content\nconst isActionable=severity!=='info';\nconst ml=(actualMessage+' '+event).toLowerCase();\nlet urgency='normal';\nif(severity==='critical')urgency='critical';\nelse if(/i.o.latency|degraded|crashed|disk.failure|disk.error|bad.sector/.test(ml))urgency='high';\nelse if(/smart.+warning|ups.+(battery|power)|iscsi.+(disconnect|error)/.test(ml))urgency='high';\nelse if(/raid.+degrad|volume.+crash/.test(ml))urgency='critical';\n\n// 9. Format output\nconst displayMsg=actualMessage.replace(/^\\[.*?\\]\\s*/,'').replace(/\\n/g,' ').trim().substring(0,300);\nconst em=urgency==='critical'?'\\ud83d\\udd34':urgency==='high'?'\\ud83d\\udfe0':'\\ud83d\\udfe1';\nconst pb=em+' [Synology DSM] '+event+'\\nHost: '+hostname+'\\nCategory: '+category+'\\nSeverity: '+severity+(displayMsg&&displayMsg!==event?'\\nDetails: '+displayMsg:'');\nconst hb='<b>'+em+' [Synology DSM] '+event+'</b><br/>Host: <code>'+hostname+'</code><br/>Category: '+category+'<br/>Severity: <code>'+severity+'</code>'+(displayMsg&&displayMsg!==event?'<br/>Details: '+displayMsg:'');\nreturn[{json:{hostname,event,message:actualMessage,severity,category,isActionable,urgency,plainBody:pb,htmlBody:hb,matrixBody:JSON.stringify({msgtype:urgency==='normal'?'m.notice':'m.text',body:pb,format:'org.matrix.custom.html',formatted_body:hb}),safeHostname:hostname.replace(/[^a-zA-Z0-9._-]/g,''),safeEvent:event.replace(/[^a-zA-Z0-9 _-]/g,'').substring(0,50)}}];"
+                }
+            },
+            {
+                "id": "is-actionable",
+                "name": "Is Actionable?",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    660,
+                    0
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "caseSensitive": true
+                        },
+                        "conditions": [
+                            {
+                                "id": "chk1",
+                                "leftValue": "={{ $json.isActionable }}",
+                                "rightValue": true,
+                                "operator": {
+                                    "type": "boolean",
+                                    "operation": "true"
+                                }
+                            }
+                        ],
+                        "combinator": "and"
+                    }
+                }
+            },
+            {
+                "id": "post-matrix",
+                "name": "Post to Matrix",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    880,
+                    0
+                ],
+                "parameters": {
+                    "method": "PUT",
+                    "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/dsm-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ $json.matrixBody }}"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_MATRIX_CRED",
+                        "name": "Matrix Claude Bot"
+                    }
+                }
+            },
+            {
+                "id": "is-high",
+                "name": "Is High Urgency?",
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2,
+                "position": [
+                    1100,
+                    0
+                ],
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "caseSensitive": true
+                        },
+                        "conditions": [
+                            {
+                                "id": "chk2",
+                                "leftValue": "={{ $('Parse DSM Alert').first().json.urgency }}",
+                                "rightValue": "normal",
+                                "operator": {
+                                    "type": "string",
+                                    "operation": "notEquals"
+                                }
+                            }
+                        ],
+                        "combinator": "and"
+                    }
+                }
+            },
+            {
+                "id": "triage-instr",
+                "name": "Post Triage Instruction",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1320,
+                    -100
+                ],
+                "parameters": {
+                    "method": "PUT",
+                    "url": "=https://matrix.example.net/_matrix/client/v3/rooms/%21AOMuEtXGyzGFLgObKN:matrix.example.net/send/m.room.message/dsm-triage-{{ Date.now() }}-{{ Math.random().toString(36).substring(7) }}",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify({msgtype:'m.text',body:'@openclaw use the exec tool to run: ./skills/infra-triage/infra-triage.sh '+$('Parse DSM Alert').first().json.safeHostname+' \"DSM: '+$('Parse DSM Alert').first().json.safeEvent+'\" '+$('Parse DSM Alert').first().json.severity,format:'org.matrix.custom.html',formatted_body:'<a href=\"https://matrix.to/#/@openclaw:matrix.example.net\">@openclaw</a> use the exec tool to run: <code>./skills/infra-triage/infra-triage.sh '+$('Parse DSM Alert').first().json.safeHostname+' \"DSM: '+$('Parse DSM Alert').first().json.safeEvent+'\" '+$('Parse DSM Alert').first().json.severity+'</code>','m.mentions':{user_ids:['@openclaw:matrix.example.net']}}) }}"
+                },
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "REDACTED_MATRIX_CRED",
+                        "name": "Matrix Claude Bot"
+                    }
+                }
+            }
+        ],
+        "connections": {
+            "Webhook Trigger": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond OK",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Respond OK": {
+                "main": [
+                    [
+                        {
+                            "node": "Parse DSM Alert",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Parse DSM Alert": {
+                "main": [
+                    [
+                        {
+                            "node": "Is Actionable?",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Is Actionable?": {
+                "main": [
+                    [
+                        {
+                            "node": "Post to Matrix",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Post to Matrix": {
+                "main": [
+                    [
+                        {
+                            "node": "Is High Urgency?",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Is High Urgency?": {
+                "main": [
+                    [
+                        {
+                            "node": "Post Triage Instruction",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Redrick Schuhart",
+        "name": null,
+        "description": null,
+        "autosaved": false,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-03-28T11:23:39.632Z",
+                "id": 976,
+                "workflowId": "osv5EJJWGsTETw18",
+                "versionId": "18603522-d265-427c-9189-dce3433007a7",
+                "event": "activated",
+                "userId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        ]
+    }
+}

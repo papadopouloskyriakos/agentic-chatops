@@ -1,0 +1,3 @@
+{"tasks":[
+  {"task_id":"GV-1","title":"Governance metrics + auto-demote candidates","dependencies":[],"parallelizable":true,"files_owned":["scripts/write-governance-metrics.py"],"requirement_ids":["REQ-301","REQ-302","REQ-303","REQ-304"],"bounded_context":"governance","acceptance_test":"spec/004-governance/acceptance/governance.feature","risk_score":0.6}
+]}

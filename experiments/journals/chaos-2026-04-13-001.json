@@ -1,0 +1,527 @@
+{
+  "chaoslib-version": "1.40.0",
+  "platform": "Linux-6.17.2-2-pve",
+  "experiment": {
+    "title": "Chaos experiment chaos-2026-04-13-001",
+    "description": "Killing NL \u2194 GR (freedom): expect BGP failover via backup path within 30s. Zero HTTP 5xx on all monitored domains.",
+    "contributions": {
+      "reliability": "high",
+      "availability": "high",
+      "performance": "medium",
+      "security": "none"
+    },
+    "steady-state-hypothesis": {
+      "title": "Infrastructure steady state",
+      "probes": []
+    },
+    "method": [],
+    "rollbacks": []
+  },
+  "status": "completed",
+  "steady_states": {
+    "before": {
+      "timestamp": "2026-04-13T14:11:59Z",
+      "snapshot_duration_seconds": 19.17,
+      "librenms_alerts": {
+        "nl": {
+          "site": "NL",
+          "count": 0
+        },
+        "gr": {
+          "site": "GR",
+          "count": 0
+        },
+        "total": 0
+      },
+      "prometheus_health": {
+        "total": 139,
+        "up": 131,
+        "down": 8
+      },
+      "http": {
+        "total": 5,
+        "ok": 5,
+        "targets": [
+          {
+            "domain": "kyriakos.papadopoulos.tech",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 232.9
+          },
+          {
+            "domain": "get.cubeos.app",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 216.9
+          },
+          {
+            "domain": "meshsat.net",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 135.0
+          },
+          {
+            "domain": "mulecube.com",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 144.2
+          },
+          {
+            "domain": "hub.meshsat.net",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 215.3
+          }
+        ]
+      },
+      "containers": {
+        "nl-dmz01": {
+          "count": 28,
+          "containers": [
+            "portfolio",
+            "withelli",
+            "withelli-beta",
+            "meshsat-mariadb",
+            "meshsat-hub",
+            "meshsat-garbd",
+            "meshsat-nats",
+            "meshsat-redis",
+            "meshsat-hub-nginx",
+            "umami",
+            "ots-eud_handler",
+            "ots-eud_handler-ssl",
+            "ots-cot_parser",
+            "nginx-proxy",
+            "ots",
+            "rabbitmq",
+            "ots-db",
+            "ots-webui",
+            "cubeos-website",
+            "meshsat-website",
+            "meshsat-releases",
+            "meshsat-docs",
+            "cubeos-demo",
+            "umami-nginx",
+            "umami-db",
+            "cubeos-releases",
+            "mulecube",
+            "mulecube-dashboard"
+          ]
+        },
+        "gr-dmz01": {
+          "count": 24,
+          "containers": [
+            "portfolio",
+            "withelli",
+            "withelli-beta",
+            "meshsat-mariadb",
+            "meshsat-hub",
+            "meshsat-nats",
+            "meshsat-hub-nginx",
+            "meshsat-redis",
+            "ots-eud_handler",
+            "ots-eud_handler-ssl",
+            "nginx-proxy",
+            "ots-cot_parser",
+            "ots",
+            "rabbitmq",
+            "ots-db",
+            "ots-webui",
+            "cubeos-website",
+            "meshsat-releases",
+            "meshsat-docs",
+            "meshsat-website",
+            "cubeos-demo",
+            "cubeos-releases",
+            "mulecube",
+            "mulecube-dashboard"
+          ]
+        }
+      },
+      "vpn_tunnels": {
+        "total": 6,
+        "up": 6,
+        "standby": 0,
+        "down": 0,
+        "tunnels": [
+          {
+            "label": "NL \u2194 GR",
+            "wan": "xs4all",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 NO",
+            "wan": "xs4all",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 CH",
+            "wan": "xs4all",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 GR",
+            "wan": "freedom",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 NO",
+            "wan": "freedom",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 CH",
+            "wan": "freedom",
+            "status": "up"
+          }
+        ]
+      },
+      "bgp_peers": {
+        "total": 8,
+        "established": 7,
+        "routes": 2,
+        "peers": [
+          {
+            "neighbor": "10.255.200.X",
+            "state": "Idle",
+            "prefixes": 0
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 15
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 15
+          },
+          {
+            "neighbor": "10.255.200.X",
+            "state": "established",
+            "prefixes": 13
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          }
+        ]
+      },
+      "bgp_routes": {
+        "routes": 2
+      },
+      "latency": {
+        "targets": [
+          {
+            "label": "NL-GR-xs4all",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-GR-freedom",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-NO-xs4all",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-CH-xs4all",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-NO-freedom",
+            "avg_ms": 20.0,
+            "loss_pct": 0.0
+          },
+          {
+            "label": "NL-CH-freedom",
+            "avg_ms": 20.0,
+            "loss_pct": 0.0
+          }
+        ]
+      }
+    },
+    "after": {
+      "timestamp": "2026-04-13T14:14:40Z",
+      "snapshot_duration_seconds": 19.15,
+      "librenms_alerts": {
+        "nl": {
+          "site": "NL",
+          "count": 0
+        },
+        "gr": {
+          "site": "GR",
+          "count": 4
+        },
+        "total": 4
+      },
+      "prometheus_health": {
+        "total": 139,
+        "up": 138,
+        "down": 1
+      },
+      "http": {
+        "total": 5,
+        "ok": 5,
+        "targets": [
+          {
+            "domain": "kyriakos.papadopoulos.tech",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 188.8
+          },
+          {
+            "domain": "get.cubeos.app",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 215.8
+          },
+          {
+            "domain": "meshsat.net",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 134.0
+          },
+          {
+            "domain": "mulecube.com",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 163.6
+          },
+          {
+            "domain": "hub.meshsat.net",
+            "status": 200,
+            "expected": 200,
+            "ok": true,
+            "latency_ms": 214.8
+          }
+        ]
+      },
+      "containers": {
+        "nl-dmz01": {
+          "count": 28,
+          "containers": [
+            "portfolio",
+            "withelli",
+            "withelli-beta",
+            "meshsat-mariadb",
+            "meshsat-hub",
+            "meshsat-garbd",
+            "meshsat-nats",
+            "meshsat-redis",
+            "meshsat-hub-nginx",
+            "umami",
+            "ots-eud_handler",
+            "ots-eud_handler-ssl",
+            "ots-cot_parser",
+            "nginx-proxy",
+            "ots",
+            "rabbitmq",
+            "ots-db",
+            "ots-webui",
+            "cubeos-website",
+            "meshsat-website",
+            "meshsat-releases",
+            "meshsat-docs",
+            "cubeos-demo",
+            "umami-nginx",
+            "umami-db",
+            "cubeos-releases",
+            "mulecube",
+            "mulecube-dashboard"
+          ]
+        },
+        "gr-dmz01": {
+          "count": 24,
+          "containers": [
+            "portfolio",
+            "withelli",
+            "withelli-beta",
+            "meshsat-mariadb",
+            "meshsat-hub",
+            "meshsat-nats",
+            "meshsat-hub-nginx",
+            "meshsat-redis",
+            "ots-eud_handler",
+            "ots-eud_handler-ssl",
+            "nginx-proxy",
+            "ots-cot_parser",
+            "ots",
+            "rabbitmq",
+            "ots-db",
+            "ots-webui",
+            "cubeos-website",
+            "meshsat-releases",
+            "meshsat-docs",
+            "meshsat-website",
+            "cubeos-demo",
+            "cubeos-releases",
+            "mulecube",
+            "mulecube-dashboard"
+          ]
+        }
+      },
+      "vpn_tunnels": {
+        "total": 6,
+        "up": 6,
+        "standby": 0,
+        "down": 0,
+        "tunnels": [
+          {
+            "label": "NL \u2194 GR",
+            "wan": "xs4all",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 NO",
+            "wan": "xs4all",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 CH",
+            "wan": "xs4all",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 GR",
+            "wan": "freedom",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 NO",
+            "wan": "freedom",
+            "status": "up"
+          },
+          {
+            "label": "NL \u2194 CH",
+            "wan": "freedom",
+            "status": "up"
+          }
+        ]
+      },
+      "bgp_peers": {
+        "total": 8,
+        "established": 7,
+        "routes": 2,
+        "peers": [
+          {
+            "neighbor": "10.255.200.X",
+            "state": "Active",
+            "prefixes": 0
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 15
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 15
+          },
+          {
+            "neighbor": "10.255.200.X",
+            "state": "established",
+            "prefixes": 13
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          },
+          {
+            "neighbor": "10.0.X.X",
+            "state": "established",
+            "prefixes": 6
+          }
+        ]
+      },
+      "bgp_routes": {
+        "routes": 2
+      },
+      "latency": {
+        "targets": [
+          {
+            "label": "NL-GR-xs4all",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-GR-freedom",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-NO-xs4all",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-CH-xs4all",
+            "avg_ms": null,
+            "loss_pct": 100.0
+          },
+          {
+            "label": "NL-NO-freedom",
+            "avg_ms": 20.0,
+            "loss_pct": 0.0
+          },
+          {
+            "label": "NL-CH-freedom",
+            "avg_ms": 20.0,
+            "loss_pct": 0.0
+          }
+        ]
+      }
+    }
+  },
+  "run": [
+    {
+      "time": "2026-04-13T14:14:59Z",
+      "event": "measurement_complete",
+      "detail": "26 samples, detection=Nones, convergence=Nones"
+    }
+  ],
+  "start": "2026-04-13T14:11:59Z",
+  "end": "2026-04-13T14:14:09Z",
+  "duration": 130.601899
+}

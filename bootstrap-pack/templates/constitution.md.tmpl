@@ -1,0 +1,39 @@
+# Constitution — `<project-slug>`
+
+5-15 non-negotiable principles that govern all work in this project. Loaded into every Claude session that touches this repo. Override only via formal RFC.
+
+## Article I — Test-First Imperative (NON-NEGOTIABLE)
+
+Every functional change must ship with a test that fails before the change and passes after. Agents that delete or disable tests to make CI green are violating this article and their work must be rejected.
+
+## Article II — Library-First
+
+Prefer well-maintained existing libraries over custom implementations. Custom code requires explicit justification in the relevant ADR before being written.
+
+## Article III — Contract-Before-Code
+
+All API endpoints, event schemas, and persistent data models must be defined in `spec/<feature>/contracts/` BEFORE implementation. Workers consume the contracts; implementations conform to them, not the other way around.
+
+## Article IV — Bounded-Context Isolation
+
+A single task may modify files in exactly one bounded context (see `PROJECT.json#bounded_contexts`). Cross-context changes must be split into one task per affected context.
+
+## Article V — Atomic Tasks
+
+Every task in `tasks.json` declares `files_owned`, `dependencies`, `acceptance_test`, `parallelizable`, `bounded_context`, `risk_score`. No exceptions. The validator at `scripts/validate-project-spec.py` enforces this.
+
+## Article VI — Files-Owned Non-Overlap
+
+Two tasks with `parallelizable: true` in the same dependency wave MUST NOT share any `files_owned` entries. Enforced at insertion time by `planner-decompose.py`.
+
+## Article VII — One MR per Feature
+
+Workers produce patches that the merge-coordinator assembles into ONE MR per feature. Workers MUST NOT open MRs directly.
+
+<!-- Add Articles VIII-XV as project-specific rules emerge. Examples below: -->
+
+<!-- ## Article VIII — Performance Budget
+Every endpoint must respond in <500ms p99. Exceeded budgets block merge. -->
+
+<!-- ## Article IX — Security Baseline
+Every PR is scanned by gosec/bandit/semgrep. High-severity findings block merge. -->

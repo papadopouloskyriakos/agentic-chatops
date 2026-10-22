@@ -1,0 +1,190 @@
+{
+  "updatedAt": "2026-03-09T04:05:32.716Z",
+  "createdAt": "2026-03-06T21:46:47.153Z",
+  "id": "e3e2SFPKc1DLsisi",
+  "name": "NL - Claude Gateway YouTrack Receiver",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "YouTrack Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "youtrack-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "youtrack-webhook"
+    },
+    {
+      "id": "extract-issue",
+      "name": "Extract Issue Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body = $('YouTrack Webhook').first().json.body || $('YouTrack Webhook').first().json;\n\nconst issueId = body.issueId || body.id || body.issue?.id || '';\nconst summary = body.summary || body.issue?.summary || '';\nconst description = body.description || body.issue?.description || '';\n\nconst updatedBy = body.updatedBy || body.issue?.updatedBy?.login || '';\nconst isBotEvent = updatedBy === 'claude-bot' || updatedBy === 'n8n';\n\n// Validate issue ID format: must be PROJECT-NUMBER (e.g. CUBEOS-46)\nconst validIdFormat = /^[A-Z]+-\\d+$/.test(issueId);\n\nconst isValid = !!(validIdFormat && (summary || description)) && !isBotEvent;\n\nreturn [{ json: { issueId, summary, description, isValid, isBotEvent, rejectedReason: !validIdFormat ? 'invalid_id_format' : (isBotEvent ? 'bot_event' : '') } }];"
+      }
+    },
+    {
+      "id": "is-valid-issue",
+      "name": "Is Valid Issue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-valid",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        700,
+        -50
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"accepted\", \"issueId\": \"{{ $('Extract Issue Data').first().json.issueId }}\"}"
+      }
+    },
+    {
+      "id": "respond-skip",
+      "name": "Respond Skip",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        700,
+        100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"skipped\", \"reason\": \"invalid or bot event\"}"
+      }
+    },
+    {
+      "id": "fire-runner",
+      "name": "Fire Runner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        920,
+        -50
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "qadF2WcaBsIR7SWG",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "YouTrack Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Issue Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Issue Data": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Issue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Issue?": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond OK": {
+      "main": [
+        [
+          {
+            "node": "Fire Runner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "bf63107c-37f8-461f-9329-1d0cccf5901a",
+  "activeVersionId": "bf63107c-37f8-461f-9329-1d0cccf5901a",
+  "versionCounter": 15,
+  "triggerCount": 1,
+  "tags": []
+}

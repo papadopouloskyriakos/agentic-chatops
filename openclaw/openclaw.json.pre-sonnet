@@ -1,0 +1,336 @@
+{
+  "models": {
+    "providers": {
+      "openai": {
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKey": "REDACTED_OPENAI_KEY",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "gpt-5.1",
+            "name": "GPT-5.1",
+            "contextWindow": 400000,
+            "maxTokens": 65536,
+            "cost": {
+              "input": 1.25,
+              "output": 10,
+              "cacheRead": 0.125,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "gpt-4o",
+            "name": "GPT-4o",
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 2.5,
+              "output": 10,
+              "cacheRead": 1.25,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "gpt-4o-mini",
+            "name": "GPT-4o Mini",
+            "contextWindow": 128000,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0.15,
+              "output": 0.6,
+              "cacheRead": 0.075,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      },
+      "anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "REDACTED_ANTHROPIC_KEY",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "name": "Claude Haiku 4.5",
+            "contextWindow": 200000,
+            "maxTokens": 8192,
+            "cost": {
+              "input": 0.8,
+              "output": 4,
+              "cacheRead": 0.08,
+              "cacheWrite": 1
+            }
+          }
+        ]
+      },
+      "ollama": {
+        "baseUrl": "https://ollama.example.net",
+        "apiKey": "ollama-local",
+        "api": "ollama",
+        "models": [
+          {
+            "id": "qwen3-coder:latest",
+            "name": "Qwen3 Coder",
+            "contextWindow": 16384,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "devstral-small-2:latest",
+            "name": "Devstral Small 2",
+            "contextWindow": 16384,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          },
+          {
+            "id": "qwen3:30b-a3b",
+            "name": "Qwen3 30B-A3B MoE",
+            "contextWindow": 16384,
+            "maxTokens": 16384,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai/gpt-5.1"
+      },
+      "memorySearch": {
+        "enabled": true,
+        "provider": "ollama",
+        "model": "nomic-embed-text",
+        "remote": {
+          "baseUrl": "https://ollama.example.net",
+          "apiKey": "ollama-local"
+        }
+      },
+      "sandbox": {
+        "mode": "off"
+      },
+      "elevatedDefault": "full",
+      "compaction": {
+        "mode": "safeguard",
+        "provider": "ollama/qwen3:30b-a3b",
+        "memoryFlush": {
+          "enabled": true
+        },
+        "qualityGuard": {
+          "enabled": true,
+          "maxRetries": 2
+        },
+        "recentTurnsPreserve": 3
+      },
+      "embeddedPi": {
+        "projectSettingsPolicy": "trusted",
+        "executionContract": "strict-agentic"
+      }
+    }
+  },
+  "messages": {
+    "groupChat": {
+      "historyLimit": 5
+    }
+  },
+  "commands": {
+    "native": true,
+    "nativeSkills": true,
+    "restart": true,
+    "ownerDisplay": "raw",
+    "bash": false
+  },
+  "channels": {
+    "matrix": {
+      "enabled": true,
+      "homeserver": "https://matrix.example.net",
+      "accessToken": "REDACTED_OC_TOKEN",
+      "encryption": false,
+      "dm": {
+        "policy": "allowlist",
+        "allowFrom": [
+          "@dominicus:matrix.example.net"
+        ]
+      },
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": [
+        "@dominicus:matrix.example.net",
+        "@nl-librenms:matrix.example.net",
+        "@gr-librenms:matrix.example.net",
+        "@claude:matrix.example.net"
+      ],
+      "groups": {
+        "!PVkZvHgyrtBVEbgpRt:matrix.example.net": {
+          "enabled": true,
+          "requireMention": true
+        },
+        "!iXTnQsFJahUquYPDdG:matrix.example.net": {
+          "enabled": true,
+          "requireMention": true
+        },
+        "!miZJJDwFQZDkuMcBqL:matrix.example.net": {
+          "enabled": true,
+          "requireMention": true
+        },
+        "!xeNxtpScJWCmaFjeCL:matrix.example.net": {
+          "enabled": true,
+          "requireMention": true
+        },
+        "!AOMuEtXGyzGFLgObKN:matrix.example.net": {
+          "enabled": true,
+          "requireMention": true
+        },
+        "!NKosBPujbWMevzHaaM:matrix.example.net": {
+          "enabled": true,
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "https://openclaw.example.net"
+      ],
+      "dangerouslyAllowHostHeaderOriginFallback": false
+    },
+    "trustedProxies": [
+      "10.0.181.X"
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "matrix": {
+        "enabled": true
+      },
+      "active-memory": {
+        "enabled": true,
+        "config": {
+          "agents": ["main"],
+          "allowedChatTypes": ["direct"],
+          "model": "ollama/qwen3:30b-a3b",
+          "modelFallbackPolicy": "default-remote",
+          "queryMode": "recent",
+          "promptStyle": "balanced",
+          "timeoutMs": 15000,
+          "maxSummaryChars": 220,
+          "persistTranscripts": true,
+          "logging": true,
+          "thinking": "off",
+          "recentUserTurns": 3,
+          "recentAssistantTurns": 2
+        }
+      },
+      "openai": {
+        "enabled": true
+      },
+      "memory-core": {
+        "enabled": true,
+        "config": {
+          "dreaming": {
+            "enabled": true,
+            "frequency": "0 3 * * *",
+            "timezone": "UTC",
+            "verboseLogging": false,
+            "phases": {
+              "light": {
+                "enabled": true,
+                "lookbackDays": 2,
+                "dedupeSimilarity": 0.9
+              },
+              "rem": {
+                "enabled": true,
+                "lookbackDays": 7,
+                "minPatternStrength": 0.75
+              },
+              "deep": {
+                "enabled": true,
+                "minScore": 0.8,
+                "minRecallCount": 3,
+                "minUniqueQueries": 3,
+                "recencyHalfLifeDays": 14,
+                "maxAgeDays": 30
+              }
+            }
+          }
+        }
+      },
+      "memory-wiki": {
+        "enabled": true,
+        "config": {
+          "vaultMode": "bridge",
+          "bridge": {
+            "enabled": true,
+            "readMemoryArtifacts": true,
+            "indexDreamReports": true,
+            "indexDailyNotes": true,
+            "indexMemoryRoot": true,
+            "followMemoryEvents": true
+          },
+          "unsafeLocal": {
+            "allowPrivateMemoryCoreAccess": false,
+            "paths": []
+          },
+          "search": {
+            "backend": "shared",
+            "corpus": "wiki"
+          },
+          "context": {
+            "includeCompiledDigestPrompt": false
+          }
+        }
+      },
+      "webhooks": {
+        "enabled": true,
+        "config": {
+          "routes": {
+            "n8n-alert": {
+              "enabled": true,
+              "path": "/webhook/n8n-alert",
+              "sessionKey": "n8n-alert-session",
+              "secret": "REDACTED_02d2e954",
+              "controllerId": "main",
+              "description": "n8n alert intake — direct TaskFlow creation bypassing Matrix"
+            }
+          }
+        }
+      }
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.4.11",
+    "lastTouchedAt": "2026-04-13T02:37:14.090Z"
+  },
+  "tools": {
+    "exec": {
+      "host": "gateway",
+      "security": "full",
+      "ask": "off"
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "matrix": [
+          "*"
+        ]
+      }
+    }
+  }
+}

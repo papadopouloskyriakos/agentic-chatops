@@ -1,0 +1,34 @@
+# Steering — Repo conventions
+
+## Branch naming
+
+- `feat/<short-desc>` — new features
+- `fix/<short-desc>` — bug fixes
+- `refactor/<short-desc>` — refactors
+- `parallel-dev/<feature_id>/<task_id>` — parallel-dev worker branches (RESERVED — don't manually use)
+- `merge/<feature_id>` — merge-coordinator branches (RESERVED — don't manually use)
+- `snapshot/<YYYY-MM-DD>-<purpose>` — rollback snapshots
+
+## Commit messages
+
+- First line: `<type>(<scope>): <subject>` (max 70 chars)
+- type ∈ {feat, fix, refactor, test, docs, chore, perf, build, ci}
+- Body wraps at 72 chars, explains WHY not WHAT
+- Workers' commits get auto-added `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+
+## MR conventions
+
+- Title matches commit-message first-line format
+- Description includes: Summary / Test plan / Rollback notes
+- High-risk MRs auto-flag `[NEEDS-HUMAN]` per `classify-feature-risk.py`
+- 1 MR per feature (workers don't open MRs)
+
+## File layout
+
+- `src/<module>/...` — production code
+- `tests/<module>/...` — tests (mirrors src layout)
+- `contracts/` — OpenAPI / AsyncAPI / JSON Schemas
+- `adr/` — Architecture Decision Records
+- `spec/<NNN-feature>/` — per-feature specs
+- `steering/` — cross-cutting rules (this dir)
+- `docs/runbooks/` — operator runbooks

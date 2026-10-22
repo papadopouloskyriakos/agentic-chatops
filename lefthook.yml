@@ -1,0 +1,22 @@
+# Pre-push validation for the claude-gateway repo.
+#
+# Mirrors the .gitlab-ci.yml `validate_code_nodes` gate so an n8n Code-node
+# SyntaxError (the 2026-04-10 14-hour-outage class) is caught LOCALLY before it
+# can be pushed — not just on the server. (IFRNLLEI01PRD-1083, 2026-06-16)
+#
+# Activate once per clone with:  lefthook install
+# (CI enforces the same check unconditionally, so a missing local install
+#  cannot let a bad Code node reach main.)
+
+pre-push:
+  parallel: false
+  commands:
+    n8n-code-nodes:
+      tags: n8n safety
+      glob: "workflows/*.json"
+      run: |
+        FAIL=0
+        for f in {push_files}; do
+          bash scripts/validate-n8n-code-nodes.sh --file "$f" || FAIL=1
+        done
+        [ "$FAIL" -eq 0 ]
