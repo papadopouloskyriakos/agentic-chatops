@@ -1,0 +1,4 @@
+{"feature_id":"001-foo","tasks":[
+  {"task_id":"T-001","title":"Do A","files_owned":["a.go"],"prompt":"do a","dependencies":[],"parallelizable":true,"bounded_context":"a","requirement_ids":["REQ-001"],"acceptance_test":"go test","complexity":3,"risk_score":0.3,"max_wall_clock_minutes":15,"max_loc_delta":100},
+  {"task_id":"T-002","title":"Do B","files_owned":["b.go"],"prompt":"do b","dependencies":[],"parallelizable":true,"bounded_context":"b","requirement_ids":["REQ-002"],"acceptance_test":"go test","complexity":3,"risk_score":0.3,"max_wall_clock_minutes":15,"max_loc_delta":100}
+]}

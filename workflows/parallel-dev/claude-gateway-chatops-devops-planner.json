@@ -1,0 +1,143 @@
+{
+    "updatedAt": "2026-05-17T11:48:41.614Z",
+    "createdAt": "2026-05-17T11:48:41.614Z",
+    "id": "AVHleUvGGPzgkbaH",
+    "name": "NL - ChatDevOps Planner",
+    "description": null,
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+        {
+            "id": "planner-webhook",
+            "name": "Planner Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                240,
+                300
+            ],
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "chatops-devops-planner",
+                "responseMode": "responseNode",
+                "options": {}
+            }
+        },
+        {
+            "id": "validate-input",
+            "name": "Validate Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                460,
+                300
+            ],
+            "parameters": {
+                "jsCode": "const body = $('Planner Webhook').first().json.body || $('Planner Webhook').first().json;\nconst featureId = body.featureId || body.feature_id || body.issueId || '';\nconst repoSlug = body.repoSlug || body.repo_slug || '';\nconst dryRun = !!body.dryRun || !!body.dry_run;\n\nif (!/^[A-Z][A-Z0-9_]+-\\d+$/.test(featureId)) {\n  return [{ json: { error: 'invalid featureId; expected like CUBEOS-1234', received: featureId } }];\n}\n\nreturn [{ json: { featureId, repoSlug, dryRun, valid: true } }];"
+            }
+        },
+        {
+            "id": "run-planner",
+            "name": "Run Planner",
+            "type": "n8n-nodes-base.ssh",
+            "typeVersion": 1,
+            "position": [
+                680,
+                300
+            ],
+            "parameters": {
+                "authentication": "privateKey",
+                "command": "={{ ($('Validate Input').first().json.valid) ? (\n  '/home/app-user/gateway-state/bin/planner-decompose.py'\n  + ' --feature-id ' + $('Validate Input').first().json.featureId\n  + ($('Validate Input').first().json.repoSlug ? ' --repo-slug ' + $('Validate Input').first().json.repoSlug : '')\n  + ($('Validate Input').first().json.dryRun ? ' --dry-run' : '')\n  + ' --json'\n) : 'echo \"{\\\"error\\\":\\\"input validation failed\\\"}\" && exit 1' }}",
+                "cwd": "/tmp"
+            },
+            "credentials": {
+                "sshPrivateKey": {
+                    "id": "REDACTED_SSH_CRED",
+                    "name": "nl-claude01 - SSH app-user"
+                }
+            }
+        },
+        {
+            "id": "respond-webhook",
+            "name": "Respond",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                900,
+                300
+            ],
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.parse($('Run Planner').first().json.stdout || '{}') }}"
+            }
+        }
+    ],
+    "connections": {
+        "Planner Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [
+                    {
+                        "node": "Run Planner",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Run Planner": {
+            "main": [
+                [
+                    {
+                        "node": "Respond",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "b7093092-83bb-48e1-a199-1ad9c224c116",
+    "activeVersionId": null,
+    "versionCounter": 1,
+    "triggerCount": 0,
+    "shared": [
+        {
+            "updatedAt": "2026-05-17T11:48:41.630Z",
+            "createdAt": "2026-05-17T11:48:41.630Z",
+            "role": "workflow:owner",
+            "workflowId": "AVHleUvGGPzgkbaH",
+            "projectId": "CLDM2Ezgw9101HuF",
+            "project": {
+                "updatedAt": "2025-01-28T17:38:17.181Z",
+                "createdAt": "2025-01-28T17:31:03.531Z",
+                "id": "CLDM2Ezgw9101HuF",
+                "name": "Redrick Schuhart <mlkajixn@mail.example.net>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "e9fee775-b2ff-4def-84a3-eddfe7e43be1"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": null
+}

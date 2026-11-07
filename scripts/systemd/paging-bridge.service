@@ -1,0 +1,21 @@
+[Unit]
+Description=Paging bridge: Alertmanager tier-1 -> ntfy push (+ SMS for ULTRA-urgent allowlist)
+Documentation=https://gitlab.example.net/n8n/claude-gateway/-/blob/main/scripts/paging-bridge.py
+After=default.target network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /app/claude-gateway/scripts/paging-bridge.py
+Restart=on-failure
+RestartSec=10s
+Environment=HOME=/home/app-user
+Environment=AM_TWILIO_PORT=9106
+Environment=PAGING_SITE=nl
+StandardOutput=journal
+StandardError=journal
+# Known limitation: user-slice services sit at oom_score_adj=200 (preferred OOM victim;
+# killed 4x on 2026-08-25). A root-installed system unit with OOMScoreAdjust=-500 would
+# harden this - operator decision (docs/runbooks/paging-ntfy.md).
+
+[Install]
+WantedBy=default.target

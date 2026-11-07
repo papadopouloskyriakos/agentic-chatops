@@ -1,0 +1,87 @@
+# promtool test rules for paops.yml
+#
+# Run: kubectl -n monitoring exec ... promtool test rules /path/to/paops.test.yml
+rule_files:
+  - paops.yml
+
+tests:
+  # ─── PaopsTwilioRegistrationDown ─────────────────────────────────────────
+  - interval: 1m
+    name: "PaopsTwilioRegistrationDown fires after 10m without a Twilio registration"
+    input_series:
+      - series: 'paops_registration{line="twilio"}'
+        values: '0+0x20'
+      - series: 'paops_registration{line="fritzbox"}'
+        values: '0+0x20'
+      - series: 'paops_fritz_expected'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: PaopsTwilioRegistrationDown
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: PaopsTwilioRegistrationDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: paops
+              line: twilio
+            exp_annotations:
+              summary: "paops: the Twilio line is not registered"
+              description: >
+                Asterisk on nlpaops01 has no registration to the Twilio SIP domain,
+                so calls to +3VMID_REDACTED641 fail. Check 'pjsip show registrations' in the
+                paops-asterisk container, the TCP path through nl-fw01, and the
+                credential in OpenBao secret/paops/twilio-sip. Runbook: products/paops docs/RUNBOOK.md.
+      # The FRITZ!Box alert stays quiet while the box is not expected yet.
+      - eval_time: 11m
+        alertname: PaopsFritzRegistrationDown
+        exp_alerts: []
+
+  # ─── PaopsFritzRegistrationDown gated by paops_fritz_expected ───────────
+  - interval: 1m
+    name: "PaopsFritzRegistrationDown fires only once the box is expected"
+    input_series:
+      - series: 'paops_registration{line="fritzbox"}'
+        values: '0+0x20'
+      - series: 'paops_fritz_expected'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PaopsFritzRegistrationDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              category: paops
+              line: fritzbox
+            exp_annotations:
+              summary: "paops: the FRITZ!Box line is not registered, the mobile number is dead"
+              description: >
+                Asterisk is not registered as IP phone 620 on nlcellgw01 (10.0.181.X),
+                so the operator's mobile number takes no calls. Check the box, the SIM/VoLTE state
+                and 'pjsip show registrations'. Fallback: docs/runbooks/sim-back-to-phone.md.
+
+  # ─── PaopsContactsSyncStale ──────────────────────────────────────────────
+  - interval: 1m
+    name: "PaopsContactsSyncStale fires when the last sync failed for 15m"
+    input_series:
+      - series: 'paops_contacts_last_sync_ok'
+        values: '0+0x30'
+      - series: 'paops_contacts_last_sync_timestamp_seconds'
+        values: '0+0x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: PaopsContactsSyncStale
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PaopsContactsSyncStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: paops
+            exp_annotations:
+              summary: "paops: the Nextcloud contacts cache is stale"
+              description: >
+                paops-contacts has not completed a CardDAV sync for over an hour (or its last
+                sync failed), so caller names, languages and the blocked list drift. 'docker logs
+                paops-contacts' on nlpaops01; credential in OpenBao secret/paops/nextcloud.

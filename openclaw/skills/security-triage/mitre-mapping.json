@@ -1,0 +1,301 @@
+{
+  "_comment": "CrowdSec scenario → MITRE ATT&CK mapping. 37 scenarios + 8 scanner/infra detections = 45 entries. Auto-synced to ATT&CK Navigator on nlsec01:8080 via sync-attack-navigator.sh",
+
+  "crowdsecurity/ssh-bf": {
+    "techniques": ["T1110.001"],
+    "tactic": "Credential Access",
+    "description": "Brute Force: Password Guessing"
+  },
+  "crowdsecurity/ssh-slow-bf": {
+    "techniques": ["T1110.001"],
+    "tactic": "Credential Access",
+    "description": "Brute Force: Password Guessing (slow/distributed)"
+  },
+  "crowdsecurity/http-bf-wordpress_bf": {
+    "techniques": ["T1110.001", "T1190"],
+    "tactic": "Credential Access / Initial Access",
+    "description": "WordPress login brute force"
+  },
+  "crowdsecurity/http-generic-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "Generic HTTP brute force"
+  },
+  "crowdsecurity/http-probing": {
+    "techniques": ["T1595.002"],
+    "tactic": "Reconnaissance",
+    "description": "Active Scanning: Vulnerability Scanning"
+  },
+  "crowdsecurity/http-crawl-non_statics": {
+    "techniques": ["T1595.002", "T1190"],
+    "tactic": "Reconnaissance / Initial Access",
+    "description": "Web crawling for non-static resources"
+  },
+  "crowdsecurity/http-sensitive-files": {
+    "techniques": ["T1083", "T1590.005"],
+    "tactic": "Discovery / Reconnaissance",
+    "description": "File and Directory Discovery via HTTP"
+  },
+  "crowdsecurity/http-bad-user-agent": {
+    "techniques": ["T1595.002"],
+    "tactic": "Reconnaissance",
+    "description": "Scanning with known-bad user agents"
+  },
+  "crowdsecurity/http-path-traversal-probing": {
+    "techniques": ["T1083", "T1190"],
+    "tactic": "Discovery / Initial Access",
+    "description": "Path traversal attempts"
+  },
+  "crowdsecurity/http-sqli-probbing-detection": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "SQL injection probing"
+  },
+  "crowdsecurity/http-xss-probbing": {
+    "techniques": ["T1189"],
+    "tactic": "Initial Access",
+    "description": "Cross-site scripting probing"
+  },
+  "crowdsecurity/http-cve-2021-41773": {
+    "techniques": ["T1190", "T1083"],
+    "tactic": "Initial Access",
+    "description": "Apache path traversal CVE-2021-41773"
+  },
+  "crowdsecurity/http-cve-2021-42013": {
+    "techniques": ["T1190", "T1083"],
+    "tactic": "Initial Access",
+    "description": "Apache path traversal CVE-2021-42013"
+  },
+  "crowdsecurity/nginx-req-limit-exceeded": {
+    "techniques": ["T1498", "T1499"],
+    "tactic": "Impact",
+    "description": "Request rate limit exceeded (DoS indicator)"
+  },
+  "crowdsecurity/http-backdoors-attempts": {
+    "techniques": ["T1505.003"],
+    "tactic": "Persistence",
+    "description": "Web shell / backdoor access attempts"
+  },
+  "crowdsecurity/http-open-proxy": {
+    "techniques": ["T1090"],
+    "tactic": "Command and Control",
+    "description": "Open proxy abuse for traffic proxying"
+  },
+  "crowdsecurity/smtp-spam": {
+    "techniques": ["T1566"],
+    "tactic": "Initial Access",
+    "description": "Phishing / spam via SMTP"
+  },
+  "crowdsecurity/postfix-spam": {
+    "techniques": ["T1566"],
+    "tactic": "Initial Access",
+    "description": "Spam via Postfix"
+  },
+  "crowdsecurity/iptables-scan-multi_ports": {
+    "techniques": ["T1046"],
+    "tactic": "Discovery",
+    "description": "Network Service Discovery via port scanning"
+  },
+  "crowdsecurity/dns-poisoning": {
+    "techniques": ["T1557"],
+    "tactic": "Credential Access",
+    "description": "DNS cache poisoning attempts"
+  },
+  "crowdsecurity/apache_log4j2_cve-2021-44228": {
+    "techniques": ["T1190", "T1203"],
+    "tactic": "Initial Access / Execution",
+    "description": "Log4Shell RCE exploitation"
+  },
+  "crowdsecurity/CVE-2022-26134": {
+    "techniques": ["T1190", "T1203"],
+    "tactic": "Initial Access / Execution",
+    "description": "Atlassian Confluence OGNL injection RCE"
+  },
+  "crowdsecurity/CVE-2022-35914": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "GLPI remote code execution"
+  },
+  "crowdsecurity/CVE-2022-37042": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "Zimbra auth bypass + RCE"
+  },
+  "crowdsecurity/CVE-2022-41082": {
+    "techniques": ["T1190", "T1059"],
+    "tactic": "Initial Access / Execution",
+    "description": "Microsoft Exchange ProxyNotShell RCE"
+  },
+  "crowdsecurity/CVE-2022-41697": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "Zoho ManageEngine auth bypass"
+  },
+  "crowdsecurity/CVE-2022-42889": {
+    "techniques": ["T1190", "T1203"],
+    "tactic": "Initial Access / Execution",
+    "description": "Apache Commons Text RCE (Text4Shell)"
+  },
+  "crowdsecurity/CVE-2022-44877": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "CentOS Web Panel RCE"
+  },
+  "crowdsecurity/CVE-2022-46169-bf": {
+    "techniques": ["T1190", "T1110"],
+    "tactic": "Initial Access / Credential Access",
+    "description": "Cacti auth bypass + brute force"
+  },
+  "crowdsecurity/f5-big-ip-cve-2020-5902": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "F5 BIG-IP TMUI RCE"
+  },
+  "crowdsecurity/fortinet-cve-2018-13379": {
+    "techniques": ["T1190", "T1552.001"],
+    "tactic": "Initial Access / Credential Access",
+    "description": "FortiGate SSL VPN path traversal (credential theft)"
+  },
+  "crowdsecurity/fortinet-cve-2022-40684": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "FortiOS auth bypass"
+  },
+  "crowdsecurity/grafana-cve-2021-43798": {
+    "techniques": ["T1190", "T1083"],
+    "tactic": "Initial Access / Discovery",
+    "description": "Grafana directory traversal"
+  },
+  "crowdsecurity/jira_cve-2021-26086": {
+    "techniques": ["T1190", "T1083"],
+    "tactic": "Initial Access / Discovery",
+    "description": "Jira file read vulnerability"
+  },
+  "crowdsecurity/pulse-secure-sslvpn-cve-2019-11510": {
+    "techniques": ["T1190", "T1552.001"],
+    "tactic": "Initial Access / Credential Access",
+    "description": "Pulse Secure VPN arbitrary file read"
+  },
+  "crowdsecurity/spring4shell_cve-2022-22965": {
+    "techniques": ["T1190", "T1203"],
+    "tactic": "Initial Access / Execution",
+    "description": "Spring Framework RCE (Spring4Shell)"
+  },
+  "crowdsecurity/thinkphp-cve-2018-20062": {
+    "techniques": ["T1190", "T1059"],
+    "tactic": "Initial Access / Execution",
+    "description": "ThinkPHP RCE"
+  },
+  "crowdsecurity/vmware-cve-2022-22954": {
+    "techniques": ["T1190", "T1203"],
+    "tactic": "Initial Access / Execution",
+    "description": "VMware Workspace ONE server-side template injection"
+  },
+  "crowdsecurity/vmware-vcenter-vmsa-2021-0027": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "VMware vCenter file upload RCE"
+  },
+  "ltsich/http-w00tw00t": {
+    "techniques": ["T1595.002"],
+    "tactic": "Reconnaissance",
+    "description": "w00tw00t scanner probe"
+  },
+  "local/geo-block": {
+    "techniques": ["T1595"],
+    "tactic": "Reconnaissance",
+    "description": "Geo-blocked region access attempt"
+  },
+
+  "crowdsecurity/ssh-bf-blocked-user": {
+    "techniques": ["T1110.001"],
+    "tactic": "Credential Access",
+    "description": "Brute Force: Password Guessing against blocked/invalid user"
+  },
+  "crowdsecurity/http-wordpress-enum": {
+    "techniques": ["T1595.002", "T1087"],
+    "tactic": "Reconnaissance / Discovery",
+    "description": "WordPress user/plugin enumeration"
+  },
+  "crowdsecurity/http-admin-interface-probing": {
+    "techniques": ["T1595.002"],
+    "tactic": "Reconnaissance",
+    "description": "Admin interface probing (login pages, dashboards)"
+  },
+  "crowdsecurity/http-cve-2023-22515": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "Atlassian Confluence privilege escalation CVE-2023-22515"
+  },
+  "crowdsecurity/http-cve-2023-46747": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "F5 BIG-IP auth bypass CVE-2023-46747"
+  },
+  "crowdsecurity/http-cve-2024-1709": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "ConnectWise ScreenConnect auth bypass CVE-2024-1709"
+  },
+  "crowdsecurity/smb-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "SMB brute force authentication attempts"
+  },
+  "crowdsecurity/windows-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "Windows login brute force (RDP/WinRM)"
+  },
+  "crowdsecurity/ftp-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "FTP brute force authentication attempts"
+  },
+  "crowdsecurity/telnet-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "Telnet brute force authentication attempts"
+  },
+  "crowdsecurity/mariadb-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "MariaDB brute force authentication attempts"
+  },
+  "crowdsecurity/mysql-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "MySQL brute force authentication attempts"
+  },
+  "crowdsecurity/pgsql-bf": {
+    "techniques": ["T1110"],
+    "tactic": "Credential Access",
+    "description": "PostgreSQL brute force authentication attempts"
+  },
+
+  "_scanner/nmap-port-discovery": {
+    "techniques": ["T1046"],
+    "tactic": "Discovery",
+    "description": "Scanner: daily nmap port diff detects new exposed services"
+  },
+  "_scanner/nuclei-cve-detection": {
+    "techniques": ["T1190"],
+    "tactic": "Initial Access",
+    "description": "Scanner: nuclei 12,763 templates detect CVE exploitation vectors"
+  },
+  "_scanner/testssl-tls-weakness": {
+    "techniques": ["T1557.002"],
+    "tactic": "Credential Access",
+    "description": "Scanner: testssl detects weak TLS (downgrade, weak DH, expired certs)"
+  },
+  "_infra/librenms-snmp-monitoring": {
+    "techniques": ["T1498", "T1496"],
+    "tactic": "Impact",
+    "description": "LibreNMS: bandwidth/CPU anomalies indicate DoS or cryptomining"
+  },
+  "_infra/prometheus-resource-alerts": {
+    "techniques": ["T1496", "T1485"],
+    "tactic": "Impact",
+    "description": "Prometheus: disk full/CPU spike alerts detect resource hijacking or data destruction"
+  }
+}

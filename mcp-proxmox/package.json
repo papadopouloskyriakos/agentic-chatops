@@ -1,0 +1,18 @@
+{
+  "name": "mcp-proxmox",
+  "version": "1.0.0",
+  "description": "Thin MCP server for Proxmox VE API \u2014 read-only discovery + guarded lifecycle operations",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "mcp-proxmox": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node index.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.0"
+  }
+}

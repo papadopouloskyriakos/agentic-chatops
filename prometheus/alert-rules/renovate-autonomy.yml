@@ -1,0 +1,90 @@
+# Renovate MR Autonomy lane alerts (IFRNLLEI01PRD-1645, 2026-07-06).
+# Metrics from scripts/write-renovate-autonomy-metrics.py (cron */5) +
+# scripts/write-renovate-audit-metrics.sh (weekly). Deploy in-cluster as a PrometheusRule via IaC
+# (mirrors how agentic-health.yml rules are synced). tier=1 alerts route to Twilio SMS.
+groups:
+  - name: renovate-autonomy
+    rules:
+      # ── SAFETY INVARIANT — a live auto-merge bypassed the CI/review/snapshot floor. Must never fire. ──
+      - alert: RenovateMergedWithoutSnapshot
+        expr: renovate_autonomy_merged_without_snapshot_total > 0
+        for: 0m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Renovate autonomy floor breach: a live AUTO-merge bypassed CI/review/snapshot"
+          description: "renovate_autonomy_merged_without_snapshot_total={{ $value }}. A live decision=AUTO row exists without CI-green ∧ review-APPROVE ∧ verified-snapshot. Freeze now: rm ~/gateway.renovate_autonomy"
+
+      # ── tamper-evidence: the audit hash chain no longer verifies (a row was edited/deleted) ──
+      - alert: RenovateAuditChainBroken
+        expr: renovate_autonomy_chain_ok == 0
+        for: 0m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Renovate autonomy audit hash chain BROKEN (ledger tampered)"
+          description: "renovate_autonomy_chain_ok=0 — a committed audit row was edited/deleted/reordered. The tamper-evident ledger no longer verifies; treat the autonomy decision record as compromised."
+
+      # ── weekly cross-check of the chain (fires even if the */5 metrics writer is down) ──
+      - alert: RenovateAuditChainBrokenWeekly
+        expr: renovate_autonomy_chain_broken == 1
+        for: 0m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Renovate autonomy audit hash chain BROKEN (weekly cross-check)"
+          description: "The weekly auditor's independent chain verify failed — corroborates a tampered/broken ledger."
+
+      # ── weekly invariant auditor found a floor breach ──
+      - alert: RenovateAutonomyAuditFail
+        expr: renovate_autonomy_audit_fail == 1
+        for: 5m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Renovate autonomy weekly invariant auditor FAILED"
+          description: "audit-renovate-decisions.sh exited non-zero — a live AUTO row is outside the snapshot/CI/review floor. rm ~/gateway.renovate_autonomy to freeze."
+
+      # ── dead-man on the */5 metrics writer ──
+      - alert: RenovateAutonomyMetricsStale
+        expr: (time() - renovate_autonomy_last_run_timestamp_seconds > 1800) or absent(renovate_autonomy_last_run_timestamp_seconds)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Renovate autonomy metrics writer stale (>30m) or absent"
+          description: "prom:renovate_autonomy_metrics has not run in >30m — the safety invariant metric is no longer fresh."
+
+      # ── dead-man on the weekly auditor (~8d) ──
+      - alert: RenovateAutonomyAuditStale
+        expr: (time() - renovate_autonomy_audit_last_run_timestamp_seconds > 700000) or absent(renovate_autonomy_audit_last_run_timestamp_seconds)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Renovate autonomy weekly invariant auditor stale (~8d) or absent"
+          description: "The weekly floor-invariant hasn't run — the safety invariant is no longer being checked."
+
+      # ── informational: lane still shadow-only after 2 weeks (go-live nudge) ──
+      - alert: RenovateAutonomyShadowStillOn
+        expr: renovate_autonomy_live_enabled == 0
+        for: 14d
+        labels:
+          severity: info
+        annotations:
+          summary: "Renovate autonomy lane still shadow-only (14d)"
+          description: "The lane has run shadow-only for 2 weeks (~/gateway.renovate_autonomy never set). Not a failure — a reminder to make a go-live decision."
+
+      # ── informational: autonomy stalling (>50% of MRs go to human POLL) ──
+      - alert: RenovateAutonomyHighPollRate
+        expr: sum(increase(renovate_autonomy_decisions_total{decision="POLL"}[24h])) / clamp_min(sum(increase(renovate_autonomy_decisions_total[24h])), 1) > 0.5
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Renovate autonomy: >50% of MRs stalling on human poll (24h)"
+          description: "The classifier/gates may be too conservative, or CI/snapshots are failing — autonomy isn't paying off."

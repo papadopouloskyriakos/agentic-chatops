@@ -1,0 +1,4 @@
+{"tasks":[
+  {"task_id":"IF-1","title":"Persistent SQLite surface for risk audit","dependencies":[],"parallelizable":true,"files_owned":["schema.sql"],"requirement_ids":["REQ-503","REQ-505"],"bounded_context":"interfaces","acceptance_test":"spec/006-interfaces/acceptance/interfaces.feature","risk_score":0.4},
+  {"task_id":"IF-2","title":"HTTP webhook stats + session-replay surface","dependencies":[],"parallelizable":true,"files_owned":["scripts/agentic-stats.py"],"requirement_ids":["REQ-501","REQ-502","REQ-504"],"bounded_context":"interfaces","acceptance_test":"spec/006-interfaces/acceptance/interfaces.feature","risk_score":0.35}
+]}
