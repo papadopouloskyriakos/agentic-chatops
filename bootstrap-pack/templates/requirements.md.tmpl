@@ -1,0 +1,35 @@
+# Requirements — `<feature-slug>`
+
+**EARS notation only.** Every line must match one of the 5 patterns. Linted by `scripts/ears-lint.py`.
+
+The 5 EARS patterns (Mavin et al., IEEE RE'09):
+
+| Pattern | Template |
+|---|---|
+| **Ubiquitous** | `REQ-NNN: The <system> shall <response>.` |
+| **Event-driven** | `REQ-NNN: When <trigger>, the <system> shall <response>.` |
+| **State-driven** | `REQ-NNN: While <precondition>, the <system> shall <response>.` |
+| **Optional** | `REQ-NNN: Where <feature included>, the <system> shall <response>.` |
+| **Unwanted behaviour** | `REQ-NNN: If <trigger>, then the <system> shall <response>.` |
+
+Every REQ-NNN must have a unique 3+ digit number. No prose paragraphs, no "should be", no TODO/TBD/FIXME/various/etc.
+
+---
+
+## Functional requirements
+
+REQ-001: The system shall persist user registrations in the users table.
+
+REQ-002: When a user submits valid registration JSON to POST /auth/register, the system shall return 201 with the stored user record.
+
+REQ-003: If the registration JSON fails JSON Schema validation, then the system shall return 422 with a per-field error list.
+
+REQ-004: While a user is in the unverified state, the system shall reject all requests to /api/* with 403 unverified.
+
+REQ-005: Where the optional 2FA feature is enabled, the registration response shall include a TOTP enrollment URL.
+
+## Non-functional requirements
+
+REQ-100: The system shall complete user registration in less than 500ms p99.
+
+REQ-101: The system shall accept registrations at a sustained rate of 100 req/sec without degradation.

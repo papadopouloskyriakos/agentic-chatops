@@ -1,0 +1,22 @@
+{
+  "tasks": [
+    {
+      "task_id": "T1-1",
+      "title": "Host-agnostic tier-1 suppression + blast-radius gate",
+      "dependencies": [],
+      "parallelizable": true,
+      "files_owned": [
+        "scripts/lib/tier1_suppression.py"
+      ],
+      "requirement_ids": [
+        "REQ-401",
+        "REQ-402",
+        "REQ-403",
+        "REQ-408"
+      ],
+      "bounded_context": "tier1-suppression",
+      "acceptance_test": "spec/005-tier1-suppression/acceptance/tier1-suppression.feature",
+      "risk_score": 0.45
+    }
+  ]
+}

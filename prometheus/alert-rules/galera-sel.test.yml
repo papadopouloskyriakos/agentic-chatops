@@ -1,0 +1,172 @@
+# promtool test rules for galera-sel.yml (IFRNLLEI01PRD-2992).
+#
+#   - GaleraNoPrimary fires after 5 min with no Primary while a DB host answers; NOT when one
+#     node is Primary; NOT when no host answers (that is GaleraStateUnknown instead).
+#   - PVEBMCCriticalEvent fires for a record first seen within 15 min and stops after; never for
+#     an old record (the seeded 2026-11-07 SERR: seen = its event time, hours old) nor for 0.
+#   - Both dead-men honour their for: durations.
+#
+# Run: scripts/qa/suites/test-726-prom-alert-rules.sh (promtool in the Prom pod; no page).
+rule_files:
+  - galera-sel.yml
+
+tests:
+  # ─── GaleraNoPrimary: both nodes non-Primary, hosts up (the 2026-11-07 shape) ──────
+  - interval: 1m
+    name: "GaleraNoPrimary fires after 5m with no Primary"
+    input_series:
+      - series: 'galera_node_primary{cluster="eu-nl-mariadb01", node="nlcl01mariadb01", instance="nl-claude01", job="chatops-node"}'
+        values: '1 1 0x20'
+      - series: 'galera_node_primary{cluster="eu-nl-mariadb01", node="nlcl01mariadb02", instance="nl-claude01", job="chatops-node"}'
+        values: '1 1 0x20'
+      - series: 'galera_node_host_reachable{cluster="eu-nl-mariadb01", node="nlcl01mariadb01", instance="nl-claude01", job="chatops-node"}'
+        values: '1x22'
+      - series: 'galera_node_host_reachable{cluster="eu-nl-mariadb01", node="nlcl01mariadb02", instance="nl-claude01", job="chatops-node"}'
+        values: '1x22'
+      - series: 'galera_exporter_last_run_timestamp_seconds{cluster="eu-nl-mariadb01", instance="nl-claude01", job="chatops-node"}'
+        values: '0+60x22'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: GaleraNoPrimary
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: GaleraNoPrimary
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              category: database
+              tier: "1"
+              cluster: eu-nl-mariadb01
+            exp_annotations:
+              summary: "Galera eu-nl-mariadb01 has no Primary component (5+ min): every app on proxysql is down"
+              description: "No DB node reports wsrep_cluster_status=Primary while at least one DB host answers SSH, so Nextcloud, paperless, healthops and the other proxysql consumers get 500s. Read-only plan: on nl-claude01 run ~/gitlab/n8n/claude-gateway/scripts/galera-guarded-bootstrap.py (it refuses on a UUID mismatch or a live Primary and names the highest-seqno winner). --execute is for the operator only, never automatic (postmortem IFRNLLEI01PRD-2992 item 8). Runbook: infrastructure/nl/production native/dbcluster/CLAUDE.md § Troubleshooting."
+      - eval_time: 8m
+        alertname: GaleraStateExporterStale
+        exp_alerts: []
+
+  # ─── One node still Primary (a node or garbd lost): no GaleraNoPrimary ──────────────
+  - interval: 1m
+    name: "GaleraNoPrimary stays quiet while one node is Primary"
+    input_series:
+      - series: 'galera_node_primary{cluster="eu-nl-mariadb01", node="nlcl01mariadb01"}'
+        values: '1x20'
+      - series: 'galera_node_primary{cluster="eu-nl-mariadb01", node="nlcl01mariadb02"}'
+        values: '0x20'
+      - series: 'galera_node_host_reachable{cluster="eu-nl-mariadb01", node="nlcl01mariadb01"}'
+        values: '1x20'
+      - series: 'galera_node_host_reachable{cluster="eu-nl-mariadb01", node="nlcl01mariadb02"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: GaleraNoPrimary
+        exp_alerts: []
+
+  # ─── No host answers SSH: GaleraStateUnknown, not GaleraNoPrimary ───────────────────
+  - interval: 1m
+    name: "Unreachable hosts raise GaleraStateUnknown, not GaleraNoPrimary"
+    input_series:
+      - series: 'galera_node_primary{cluster="eu-nl-mariadb01", node="nlcl01mariadb01"}'
+        values: '0x20'
+      - series: 'galera_node_primary{cluster="eu-nl-mariadb01", node="nlcl01mariadb02"}'
+        values: '0x20'
+      - series: 'galera_node_host_reachable{cluster="eu-nl-mariadb01", node="nlcl01mariadb01"}'
+        values: '0x20'
+      - series: 'galera_node_host_reachable{cluster="eu-nl-mariadb01", node="nlcl01mariadb02"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: GaleraNoPrimary
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: GaleraStateUnknown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: database
+              cluster: eu-nl-mariadb01
+            exp_annotations:
+              summary: "Galera eu-nl-mariadb01: no DB host answers SSH from nl-claude01 (10+ min)"
+              description: "write-galera-metrics.py cannot reach nlcl01mariadb01 or nlcl01mariadb02, so GaleraNoPrimary is blind. Check the hosts (nlpve04, nl-pve03) and SSH from nl-claude01 (root, ~/.ssh/one_key)."
+
+  # ─── Dead writer: the timestamp stops moving ───────────────────────────────────────
+  - interval: 1m
+    name: "GaleraStateExporterStale fires when the writer stops"
+    input_series:
+      - series: 'galera_exporter_last_run_timestamp_seconds{cluster="eu-nl-mariadb01"}'
+        values: '60x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: GaleraStateExporterStale
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GaleraStateExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: agentic-platform
+              cluster: eu-nl-mariadb01
+            exp_annotations:
+              summary: "Galera state writer has not run for 10+ min: GaleraNoPrimary is blind"
+              description: "Cronicle job galera-metrics on nl-claude01 runs scripts/write-galera-metrics.py every minute into /var/lib/node_exporter/textfile_collector/galera.prom. A textfile gauge is re-served forever by node_exporter, so a dead writer looks healthy. Check the Cronicle job history and run the script by hand."
+
+  # ─── PVEBMCCriticalEvent: a SERR first seen at t=40m fires for 15 min only ──────────
+  # seen is unix seconds and promtool's clock starts at 0, so 2400 = "first seen at 40m";
+  # the nl-pve03 series (seen = 1 s) stands for an old, already-known record (the seeded
+  # 2026-11-07 SERR is hours old the same way); type processor = 0 = never seen.
+  - interval: 1m
+    name: "PVEBMCCriticalEvent fires for a fresh event, never for old or absent ones"
+    input_series:
+      - series: 'pve_sel_last_critical_seen_timestamp_seconds{instance="nlpve04", job="pve-node-exporter", type="pci_serr"}'
+        values: '0x39 2400x40'
+      - series: 'pve_sel_last_critical_seen_timestamp_seconds{instance="nlpve04", job="pve-node-exporter", type="processor"}'
+        values: '0x80'
+      - series: 'pve_sel_last_critical_seen_timestamp_seconds{instance="nl-pve03", job="pve-node-exporter", type="pci_serr"}'
+        values: '1x80'
+      - series: 'pve_sel_last_run_timestamp_seconds{instance="nlpve04", job="pve-node-exporter"}'
+        values: '0+60x80'
+      - series: 'pve_sel_read_ok{instance="nlpve04", job="pve-node-exporter"}'
+        values: '1x80'
+    alert_rule_test:
+      - eval_time: 38m
+        alertname: PVEBMCCriticalEvent
+        exp_alerts: []
+      - eval_time: 42m
+        alertname: PVEBMCCriticalEvent
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              category: hardware
+              tier: "2"
+              instance: nlpve04
+              job: pve-node-exporter
+              type: pci_serr
+            exp_annotations:
+              summary: "nlpve04 BMC logged a new critical pci_serr SEL event"
+              description: "pve-sel-exporter saw a new critical BMC SEL assertion (type pci_serr) on nlpve04 within the last 15 min. If the host had hung, this fires once it is back. On 2026-11-07 06:25:37 UTC a PCI SERR from the BCM57416 10 G NIC (bus 05, both bond0 legs) halted nlpve04 with no kernel trace. Read the SEL: ssh root@nlpve04 python3 /usr/local/bin/pve-sel-exporter.py --dump (records hex; --stdout for the decoded summary). Runbook: claude-gateway docs/runbooks/pve-host-exporters.md § In-band BMC SEL exporter."
+      - eval_time: 60m
+        alertname: PVEBMCCriticalEvent
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: PVESelExporterStale
+        exp_alerts: []
+
+  # ─── Dead SEL exporter / unreadable /dev/ipmi0 ─────────────────────────────────────
+  - interval: 1m
+    name: "PVESelExporterStale fires on read_ok 0"
+    input_series:
+      - series: 'pve_sel_read_ok{instance="nlpve04"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PVESelExporterStale
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: PVESelExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              category: hardware
+              instance: nlpve04
+            exp_annotations:
+              summary: "nlpve04 BMC SEL exporter is stale or cannot read /dev/ipmi0"
+              description: "pve-sel-exporter.timer (5 min) has not completed a SEL read for 30+ min, or reports pve_sel_read_ok 0, so PVEBMCCriticalEvent is blind on this host. Check: systemctl status pve-sel-exporter.service; journalctl -u pve-sel-exporter; ls -l /dev/ipmi0 (ipmi_devintf)."

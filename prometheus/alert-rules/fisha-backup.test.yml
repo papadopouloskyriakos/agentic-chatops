@@ -1,0 +1,115 @@
+# promtool test rules for fisha-backup.yml.
+#
+#   - Stale fires once the newest finished snapshot is over 26 h old, and not while
+#     snapshots keep arriving.
+#   - TooSmall fires on a finished but near-empty archive, and not at the normal size.
+#   - CollectorStale fires on a missing series, an old last-run and collector_up 0.
+#
+# Run: scripts/qa/suites/test-726-prom-alert-rules.sh (promtool in the Prom pod; no page).
+rule_files:
+  - fisha-backup.yml
+
+tests:
+  # Last success at epoch 0 and never updated: past 26 h from 93600 s, for: 10m.
+  - interval: 5m
+    name: "Stale fires after 26h plus for"
+    input_series:
+      - series: 'fisha_ocfs2_backup_last_success_timestamp_seconds{node="nlcl01file02"}'
+        values: '0+0x400'
+      - series: 'fisha_ocfs2_backup_last_size_bytes{node="nlcl01file02"}'
+        values: '79800000000x400'
+      - series: 'fisha_ocfs2_backup_collector_up'
+        values: '1x400'
+      - series: 'fisha_ocfs2_backup_collector_last_run_timestamp_seconds'
+        values: '0+300x400'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: FishaOcfs2BackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: FishaOcfs2BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: "2"
+              service: fisha-nfs
+              scope: backup
+            exp_annotations:
+              summary: "No finished FISHA OCFS2 backup on nlpbs01 for over 26 hours"
+              description: "The nightly 04:00 UTC run of /opt/pve-backups/pbc-host-backup.sh on the node holding nfs-group produced no finished snapshot with ocfs2.pxar. Check /var/log/fisha-vm-backup/<node>/fisha-vm-backup-error.log on nlcl01file02."
+      - eval_time: 27h
+        alertname: FishaOcfs2BackupTooSmall
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: FishaOcfs2BackupCollectorStale
+        exp_alerts: []
+
+  # Snapshots keep arriving (timestamp tracks time): never stale.
+  - interval: 5m
+    name: "Stale stays quiet while backups keep arriving"
+    input_series:
+      - series: 'fisha_ocfs2_backup_last_success_timestamp_seconds{node="nlcl01file02"}'
+        values: '0+300x400'
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: FishaOcfs2BackupStale
+        exp_alerts: []
+
+  # A finished run that captured almost nothing.
+  - interval: 5m
+    name: "TooSmall fires on a near-empty archive"
+    input_series:
+      - series: 'fisha_ocfs2_backup_last_size_bytes{node="nlcl01file02"}'
+        values: '1000000x10'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FishaOcfs2BackupTooSmall
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: "2"
+              service: fisha-nfs
+              scope: backup
+            exp_annotations:
+              summary: "Newest FISHA OCFS2 backup is under 20 GiB (normally about 74 GiB)"
+              description: "The run finished but captured far too little, which usually means /mnt/ocfs2 was not mounted when it ran. Treat the snapshot as unusable and check the node that took it."
+
+  # Series absent altogether: the dead-man must still fire.
+  - interval: 5m
+    name: "CollectorStale fires when the series is absent"
+    input_series:
+      - series: 'unrelated_series'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: FishaOcfs2BackupCollectorStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: "2"
+              service: fisha-nfs
+              scope: backup
+            exp_annotations:
+              summary: "FISHA OCFS2 backup monitoring is blind"
+              description: "scripts/write-fisha-backup-metrics.py on nl-claude01 is not running or cannot read the nlpbs01 datastore, so FishaOcfs2BackupStale cannot fire."
+
+  # The collector runs but cannot read the datastore.
+  - interval: 5m
+    name: "CollectorStale fires when collector_up is 0"
+    input_series:
+      - series: 'fisha_ocfs2_backup_collector_up'
+        values: '0x12'
+      - series: 'fisha_ocfs2_backup_collector_last_run_timestamp_seconds'
+        values: '0+300x12'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: FishaOcfs2BackupCollectorStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: "2"
+              service: fisha-nfs
+              scope: backup
+            exp_annotations:
+              summary: "FISHA OCFS2 backup monitoring is blind"
+              description: "scripts/write-fisha-backup-metrics.py on nl-claude01 is not running or cannot read the nlpbs01 datastore, so FishaOcfs2BackupStale cannot fire."

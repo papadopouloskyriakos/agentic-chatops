@@ -1,0 +1,41 @@
+# promtool unit tests for intersite-autoheal.yml (run by scripts/qa/suites/test-726-prom-alert-rules.sh)
+# exp_annotations are generated from the rule file (they must match promtool's expansion exactly).
+rule_files:
+- intersite-autoheal.yml
+evaluation_interval: 1m
+tests:
+- interval: 1m
+  input_series:
+  - series: intersite_autoheal_last_result{leg="freedom"}
+    values: '0x30'
+  - series: intersite_autoheal_failure_open{leg="freedom"}
+    values: '0x30'
+  - series: intersite_autoheal_armed
+    values: '0x30'
+  - series: intersite_autoheal_last_run_timestamp
+    values: '0x30'
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: IntersiteAutohealFailed
+    exp_alerts: []
+  - eval_time: 30m
+    alertname: IntersiteAutohealStale
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: intersite_autoheal_failure_open{leg="budget"}
+    values: 1x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: IntersiteAutohealFailed
+    exp_alerts: []
+  - eval_time: 17m
+    alertname: IntersiteAutohealFailed
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        category: bgp-intersite
+        leg: budget
+      exp_annotations:
+        summary: Intersite auto-heal FAILED on the budget leg
+        description: 'intersite-tunnel-heal.py executed the full both-ends re-key for the budget NL<->GR leg but BGP did not re-Establish within the verify window, and the leg has not been seen healthy since. The wedge is deeper than the runbook re-key — human needed. Runbook: infrastructure/nl/production/edge/CLAUDE.md "Total NL<->GR partition" + docs/runbooks/intersite-tunnel-autoheal.md.'

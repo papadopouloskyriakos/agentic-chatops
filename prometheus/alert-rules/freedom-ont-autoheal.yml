@@ -1,0 +1,69 @@
+# freedom-ont-autoheal.yml — alerts over the Freedom ONT auto-heal (scripts/freedom-ont-heal.py,
+# IFRNLLEI01PRD-2992, NL house power-loss postmortem 2026-11-06/07).
+#
+# MIRROR file: the deployed truth is the PrometheusRule Terraform in
+# infrastructure/nl/production/k8s/namespaces/monitoring/intersite-autoheal-alerts.tf
+# (group freedom-ont-autoheal). Edit BOTH when changing an expression.
+#
+# The detector runs every 2 min whether or not the heal is armed, so FreedomOntWedged is the
+# signal that would have cut the 8 h powered-but-dark outage after the power loss to minutes.
+groups:
+  - name: freedom-ont-autoheal
+    interval: 1m
+    rules:
+      - alert: FreedomOntWedged
+        expr: freedom_ont_autoheal_wedged == 1
+        for: 10m
+        labels:
+          severity: warning
+          category: wan-freedom
+        annotations:
+          summary: "Freedom ONT powered but dark on nl-sw01 Gi1/0/36"
+          description: >-
+            nl-sw01 Gi1/0/36 (Freedom ONT) has been notconnect with PoE on for 10+ min and
+            nl-fw01 Track 1 is not Up — the post-power-loss wedge. If the auto-heal is armed it
+            PoE-cycles the port itself; if freedom_ont_autoheal_suppressed is 1 (maintenance
+            window, chaos, shadow, or disarmed) run the recipe by hand: interface Gi1/0/36 / power inline never /
+            wait 15 s / power inline auto / shutdown / no shutdown.
+            Runbook: docs/runbooks/freedom-ont-autoheal.md.
+
+      - alert: FreedomOntAutohealFailed
+        expr: freedom_ont_autoheal_failure_open == 1
+        for: 5m
+        labels:
+          severity: critical
+          category: wan-freedom
+        annotations:
+          summary: "Freedom ONT auto-heal did not restore Freedom"
+          description: >-
+            freedom-ont-heal.py PoE-cycled nl-sw01 Gi1/0/36 but the link and/or nl-fw01
+            Track 1 did not come back, and Freedom has not been seen healthy since. Check
+            freedom_ont_autoheal_last_link_restored: 1 = ONT link is back, PPPoE/BRAS is the
+            problem; 0 = the ONT is still dark. Runbook: docs/runbooks/freedom-ont-autoheal.md.
+
+      - alert: FreedomOntAutohealEscalated
+        expr: increase(freedom_ont_autoheal_escalations_total[30m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: wan-freedom
+        annotations:
+          summary: "Freedom ONT auto-heal escalated to a human"
+          description: >-
+            The cap of 3 PoE cycles per 24 h was reached with the ONT still powered but dark, or
+            a PoE restore failed (the port may be left with PoE OFF — run `power inline auto` on
+            nl-sw01 Gi1/0/36). The heal will not retry. Runbook: docs/runbooks/freedom-ont-autoheal.md.
+
+      - alert: FreedomOntAutohealStale
+        expr: >-
+          ((time() - freedom_ont_autoheal_last_run_timestamp) > 900)
+          or absent(freedom_ont_autoheal_last_run_timestamp)
+        for: 10m
+        labels:
+          severity: warning
+          category: wan-freedom
+        annotations:
+          summary: "Freedom ONT detector/auto-heal has not run in 15+ min"
+          description: >-
+            freedom_ont_autoheal.prom on nl-claude01 is stale or missing — the Cronicle job
+            freedom-ont-heal (*/2) is broken, so FreedomOntWedged can no longer fire.

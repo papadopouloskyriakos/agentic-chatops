@@ -1,0 +1,4 @@
+{"tasks":[
+  {"task_id":"PG-1","title":"Commit plan_hash prediction before poll","dependencies":[],"parallelizable":true,"files_owned":["scripts/infragraph-predict-plan.py"],"requirement_ids":["REQ-101","REQ-102","REQ-105"],"bounded_context":"prediction-gate","acceptance_test":"spec/002-prediction-gate/acceptance/prediction-gate.feature","risk_score":0.75},
+  {"task_id":"PG-2","title":"Mechanical match/partial/deviation verdict","dependencies":["PG-1"],"parallelizable":true,"files_owned":["scripts/infragraph-verify.py"],"requirement_ids":["REQ-103","REQ-104"],"bounded_context":"prediction-gate","acceptance_test":"spec/002-prediction-gate/acceptance/prediction-gate.feature","risk_score":0.65}
+]}

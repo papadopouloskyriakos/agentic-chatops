@@ -1,0 +1,40 @@
+# Test + doc copy of group fisha-ocfs2-backup in infra NL
+# k8s/namespaces/monitoring/nfs-alerts.tf (the deployed truth). Edit BOTH.
+# Metrics: scripts/write-fisha-backup-metrics.py (Cronicle fisha-backup-metrics).
+groups:
+  - name: fisha-ocfs2-backup
+    interval: 1m
+    rules:
+      - alert: FishaOcfs2BackupStale
+        expr: time() - max(fisha_ocfs2_backup_last_success_timestamp_seconds) > 26 * 3600
+        for: 10m
+        labels:
+          severity: warning
+          tier: "2"
+          service: fisha-nfs
+          scope: backup
+        annotations:
+          summary: "No finished FISHA OCFS2 backup on nlpbs01 for over 26 hours"
+          description: "The nightly 04:00 UTC run of /opt/pve-backups/pbc-host-backup.sh on the node holding nfs-group produced no finished snapshot with ocfs2.pxar. Check /var/log/fisha-vm-backup/<node>/fisha-vm-backup-error.log on nlcl01file02."
+      - alert: FishaOcfs2BackupTooSmall
+        expr: max(fisha_ocfs2_backup_last_size_bytes) < 20 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+          tier: "2"
+          service: fisha-nfs
+          scope: backup
+        annotations:
+          summary: "Newest FISHA OCFS2 backup is under 20 GiB (normally about 74 GiB)"
+          description: "The run finished but captured far too little, which usually means /mnt/ocfs2 was not mounted when it ran. Treat the snapshot as unusable and check the node that took it."
+      - alert: FishaOcfs2BackupCollectorStale
+        expr: absent(fisha_ocfs2_backup_collector_last_run_timestamp_seconds) or (time() - max(fisha_ocfs2_backup_collector_last_run_timestamp_seconds) > 3600) or (max(fisha_ocfs2_backup_collector_up) == 0)
+        for: 30m
+        labels:
+          severity: warning
+          tier: "2"
+          service: fisha-nfs
+          scope: backup
+        annotations:
+          summary: "FISHA OCFS2 backup monitoring is blind"
+          description: "scripts/write-fisha-backup-metrics.py on nl-claude01 is not running or cannot read the nlpbs01 datastore, so FishaOcfs2BackupStale cannot fire."

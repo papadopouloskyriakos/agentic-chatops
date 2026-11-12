@@ -1,0 +1,20 @@
+[Unit]
+Description=In-band BMC SEL exporter (read-only, /dev/ipmi0) -> node_exporter textfile pve_sel.prom
+Documentation=https://gitlab.example.net/n8n/claude-gateway/-/blob/main/scripts/pve-sel-exporter.py
+# Deployed to nlpve04 as a root system unit (IFRNLLEI01PRD-2992, postmortem item 13).
+ConditionPathExists=/dev/ipmi0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/pve-sel-exporter.py
+TimeoutStartSec=120
+Nice=10
+StateDirectory=pve-sel-exporter
+StateDirectoryMode=0700
+ProtectSystem=strict
+ReadWritePaths=/var/lib/prometheus/node-exporter
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal

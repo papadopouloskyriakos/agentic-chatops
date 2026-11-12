@@ -1,0 +1,87 @@
+# Mirror of the deployed infrastructure rule. Stable alert identities retain existing routing.
+groups:
+- name: paops-voice-line
+  interval: 60s
+  rules:
+  - alert: PaopsTwilioRegistrationDown
+    expr: proxenos_registration{instance="nlpaops01",line="twilio"} == 0
+    for: 10m
+    labels:
+      severity: warning
+      category: paops
+    annotations:
+      summary: 'Proxenos: the Twilio line is not registered'
+      description: 'The business SIP line is down. Check ''pjsip show registrations'' in proxenos-asterisk, its network path and the
+        saved line credentials. Run ops/voice-line.sh status on the assistant host.'
+  - alert: PaopsFritzRegistrationDown
+    expr: proxenos_registration{instance="nlpaops01",line="trunk"} == 0 and on(instance) proxenos_trunk_expected{instance="nlpaops01"}
+      == 1
+    for: 10m
+    labels:
+      severity: critical
+      category: paops
+    annotations:
+      summary: 'Proxenos: the primary phone trunk is not registered'
+      description: The configured primary trunk is expected but not registered. Check the upstream phone gateway and 'pjsip show registrations'
+        in proxenos-asterisk.
+  - alert: PaopsAsteriskUnhealthy
+    expr: proxenos_asterisk_healthy{instance="nlpaops01"} == 0
+    for: 5m
+    labels:
+      severity: critical
+      category: paops
+    annotations:
+      summary: 'Proxenos: Asterisk is unhealthy'
+      description: The proxenos-asterisk health check fails. Check 'docker logs proxenos-asterisk' and ops/voice-line.sh status.
+  - alert: PaopsHostDown
+    expr: up{instance="nlpaops01"} == 0
+    for: 5m
+    labels:
+      severity: critical
+      category: paops
+    annotations:
+      summary: 'Proxenos: the assistant host is unreachable'
+      description: The assistant host node exporter is unreachable; inspect the host and its network path.
+  - alert: PaopsMetricsStale
+    expr: time() - proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"} > 1200 or absent(proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"})
+    for: 10m
+    labels:
+      severity: warning
+      category: paops
+    annotations:
+      summary: 'Proxenos: host metrics are missing or stale'
+      description: No current host metrics have arrived. Check proxenos-metrics.timer and the node exporter collector. Missing renamed
+        series must not silently disable line alerts.
+- name: paops-pipeline
+  interval: 60s
+  rules:
+  - alert: PaopsPostcallJobsFailed
+    expr: proxenos_jobs_failed{instance="nlpaops01"} > 0
+    for: 15m
+    labels:
+      severity: warning
+      category: paops
+    annotations:
+      summary: 'Proxenos: {{ $value }} post-call job(s) failed'
+      description: A post-call delivery exhausted its retries. Inspect proxenos-worker and /srv/proxenos/recordings/jobs/failed; review
+        the workflow before retrying.
+  - alert: PaopsPostcallBacklog
+    expr: proxenos_jobs_pending{instance="nlpaops01"} > 3
+    for: 30m
+    labels:
+      severity: warning
+      category: paops
+    annotations:
+      summary: 'Proxenos: post-call jobs are accumulating ({{ $value }} pending)'
+      description: The worker is not draining post-call jobs. Check proxenos-worker, workflow polling and speech/model provider reachability.
+  - alert: PaopsContactsSyncStale
+    expr: proxenos_contacts_last_sync_ok{instance="nlpaops01"} == 0 or (time() - proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"})
+      > 3600 or absent(proxenos_contacts_last_sync_ok{instance="nlpaops01"})
+    for: 15m
+    labels:
+      severity: warning
+      category: paops
+    annotations:
+      summary: 'Proxenos: contacts synchronization is missing or stale'
+      description: The contact sync failed, is older than an hour, or no longer exports its status. Check proxenos-contacts and its
+        /textfile mount before trusting cached caller identities.

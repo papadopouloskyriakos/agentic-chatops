@@ -1,0 +1,65 @@
+[
+  {
+    "id": "KG01",
+    "query": "Which services depend on nl-pve01?",
+    "expected_entity_types": ["host", "incident", "service"],
+    "expected_name_substrings": ["nl-pve01", "IFRNLLEI01PRD-"],
+    "min_results": 3
+  },
+  {
+    "id": "KG02",
+    "query": "Incidents involving both nl and gr sites in the same cascade.",
+    "expected_entity_types": ["incident"],
+    "expected_name_substrings": ["IFRNLLEI01PRD-381", "IFRNLLEI01PRD-566", "IFRNLLEI01PRD-589"],
+    "min_results": 1
+  },
+  {
+    "id": "KG03",
+    "query": "What host was chaos-tested in chaos-2026-04-13-014?",
+    "expected_name_substrings": ["gr-dmz01"],
+    "min_results": 1
+  },
+  {
+    "id": "KG04",
+    "query": "Services that became unreachable during the GR isolation incident.",
+    "expected_entity_types": ["incident", "service", "host"],
+    "expected_name_substrings": ["IFRNLLEI01PRD-381", "gr"],
+    "min_results": 1
+  },
+  {
+    "id": "KG05",
+    "query": "What are the open incidents for DMZ hosts?",
+    "expected_name_substrings": ["gr-dmz01", "nl-dmz01", "dmz"],
+    "min_results": 1
+  },
+  {
+    "id": "KG06",
+    "query": "Which chaos experiments touched Freedom ISP or its VTI tunnels?",
+    "expected_name_substrings": ["chaos-", "freedom", "VTI", "tunnel"],
+    "min_results": 1
+  },
+  {
+    "id": "KG07",
+    "query": "What is the relationship between androidsdk01 and pve01 memory pressure?",
+    "expected_name_substrings": ["androidsdk01", "nl-pve01", "memory"],
+    "min_results": 1
+  },
+  {
+    "id": "KG08",
+    "query": "Identify the hosts in GR site K8s cluster.",
+    "expected_name_substrings": ["gr", "k8s"],
+    "min_results": 1
+  },
+  {
+    "id": "KG09",
+    "query": "Incidents affecting BGP peering or VTI tunnels.",
+    "expected_name_substrings": ["BGP", "VTI", "nl-fw01", "gr-fw01"],
+    "min_results": 1
+  },
+  {
+    "id": "KG10",
+    "query": "Which hostnames are connected by the highest number of shared incidents?",
+    "expected_name_substrings": ["nl-pve01", "nlk8s", "gr"],
+    "min_results": 2
+  }
+]
