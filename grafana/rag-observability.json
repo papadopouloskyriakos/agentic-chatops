@@ -1,0 +1,138 @@
+{
+  "title": "RAG Pipeline — Observability",
+  "uid": "rag-observability",
+  "tags": ["rag", "retrieval", "agentic"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "schemaVersion": 39,
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "RAG end-to-end latency (quantiles)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "kb_retrieval_latency_seconds{quantile=\"0.5\"}", "legendFormat": "p50"},
+        {"expr": "kb_retrieval_latency_seconds{quantile=\"0.95\"}", "legendFormat": "p95"},
+        {"expr": "kb_retrieval_latency_seconds{quantile=\"0.99\"}", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 2.5}, {"color": "red", "value": 5.0}]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total embedded vectors",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "kb_embedded_rows_total", "legendFormat": "total"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 15000}, {"color": "red", "value": 25000}]}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Migration trigger distance",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "description": "Ratio to FAISS cutover. >=1.0 means migrate. Max of scale-trigger and latency-trigger.",
+      "targets": [{"expr": "kb_migration_trigger_distance", "legendFormat": "trigger"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.8}, {"color": "red", "value": 1.0}]}
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Embedded rows by table",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "kb_embedded_rows", "legendFormat": "{{table}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Mean RAG latency (long window)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{"expr": "kb_retrieval_latency_mean_seconds", "legendFormat": "mean"}],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 6,
+      "type": "bargauge",
+      "title": "Migration trigger breakdown",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [
+        {"expr": "kb_migration_trigger_scale", "legendFormat": "by vector count"},
+        {"expr": "kb_migration_trigger_latency", "legendFormat": "by p95 latency"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 1.2,
+          "unit": "percentunit",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.8}, {"color": "red", "value": 1.0}]}
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Weekly hard-eval judge hit@5 and KG coverage (trend)",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "description": "Weekly automated 50-query hard retrieval eval + 10-query KG traversal eval (Monday 05:00 UTC). Judged by Haiku.",
+      "targets": [
+        {"expr": "kb_hard_eval_hit_rate", "legendFormat": "retrieval hit@5"},
+        {"expr": "kb_hard_eval_coverage_rate", "legendFormat": "retrieval coverage@5"},
+        {"expr": "kb_hard_eval_kg_coverage", "legendFormat": "KG judge coverage@5"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.60}, {"color": "green", "value": 0.75}]}
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Rerank service health",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 28},
+      "targets": [{"expr": "kb_rerank_service_up", "legendFormat": "up"}],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Rerank probe latency",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 28},
+      "targets": [{"expr": "kb_rerank_probe_latency_ms", "legendFormat": "latency"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}}
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "qwen_json silent failures (24h)",
+      "gridPos": {"h": 4, "w": 12, "x": 12, "y": 28},
+      "targets": [{"expr": "increase(kb_qwen_json_failure_total[24h])", "legendFormat": "failures/24h"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}}}
+    }
+  ],
+  "datasource": {"type": "prometheus", "uid": "prometheus"}
+}

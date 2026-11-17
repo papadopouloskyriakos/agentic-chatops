@@ -1,0 +1,82 @@
+# Galera no-Primary + in-band BMC SEL alerts (IFRNLLEI01PRD-2992, NL power-loss postmortem
+# items 8 and 13).
+#
+# Deployed to K8s via the IaC tf:
+#   infrastructure/nl/production k8s/namespaces/monitoring/galera-sel-alerts.tf
+#   (NL-only, mirror-exempt: the metrics exist only in NL Prometheus).
+# This YAML is the test+doc copy, consumed by scripts/qa/suites/test-726-prom-alert-rules.sh
+# (promtool check + test rules with galera-sel.test.yml). Edit BOTH files.
+#
+# Metric sources:
+#   galera_*   scripts/write-galera-metrics.py, Cronicle `galera-metrics` (every minute) on
+#              nl-claude01 -> textfile galera.prom -> job chatops-node
+#   pve_sel_*  scripts/pve-sel-exporter.py, systemd timer (5 min) on nlpve04 ->
+#              /var/lib/prometheus/node-exporter/pve_sel.prom -> job pve-node-exporter
+#
+# Routing (operator decisions 2026-11-07): GaleraNoPrimary tier "1" = ntfy push, one per
+# episode; PVEBMCCriticalEvent tier "2" = ntfy quiet topic alrt-quiet, never rings. The
+# warnings stay untiered (Matrix via webhook-tg + the n8n receiver). k8s/CLAUDE.md § Paging surface.
+groups:
+  - name: galera-cluster
+    interval: 1m
+    rules:
+      - alert: GaleraNoPrimary
+        expr: |
+          max by (cluster) (galera_node_primary) == 0
+          and on (cluster)
+          max by (cluster) (galera_node_host_reachable) == 1
+        for: 5m
+        labels:
+          severity: critical
+          category: database
+          tier: "1"
+        annotations:
+          summary: "Galera {{ $labels.cluster }} has no Primary component (5+ min): every app on proxysql is down"
+          description: "No DB node reports wsrep_cluster_status=Primary while at least one DB host answers SSH, so Nextcloud, paperless, healthops and the other proxysql consumers get 500s. Read-only plan: on nl-claude01 run ~/gitlab/n8n/claude-gateway/scripts/galera-guarded-bootstrap.py (it refuses on a UUID mismatch or a live Primary and names the highest-seqno winner). --execute is for the operator only, never automatic (postmortem IFRNLLEI01PRD-2992 item 8). Runbook: infrastructure/nl/production native/dbcluster/CLAUDE.md § Troubleshooting."
+      - alert: GaleraStateUnknown
+        expr: max by (cluster) (galera_node_host_reachable) == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Galera {{ $labels.cluster }}: no DB host answers SSH from nl-claude01 (10+ min)"
+          description: "write-galera-metrics.py cannot reach nlcl01mariadb01 or nlcl01mariadb02, so GaleraNoPrimary is blind. Check the hosts (nlpve04, nl-pve03) and SSH from nl-claude01 (root, ~/.ssh/one_key)."
+      - alert: GaleraStateExporterStale
+        expr: |
+          (time() - max by (cluster) (galera_exporter_last_run_timestamp_seconds) > 600)
+          or absent(galera_exporter_last_run_timestamp_seconds)
+        for: 5m
+        labels:
+          severity: warning
+          category: agentic-platform
+        annotations:
+          summary: "Galera state writer has not run for 10+ min: GaleraNoPrimary is blind"
+          description: "Cronicle job galera-metrics on nl-claude01 runs scripts/write-galera-metrics.py every minute into /var/lib/node_exporter/textfile_collector/galera.prom. A textfile gauge is re-served forever by node_exporter, so a dead writer looks healthy. Check the Cronicle job history and run the script by hand."
+
+  - name: pve-bmc-sel
+    interval: 1m
+    rules:
+      - alert: PVEBMCCriticalEvent
+        expr: |
+          (time() - pve_sel_last_critical_seen_timestamp_seconds < 900)
+          and pve_sel_last_critical_seen_timestamp_seconds > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: hardware
+          tier: "2"
+        annotations:
+          summary: "{{ $labels.instance }} BMC logged a new critical {{ $labels.type }} SEL event"
+          description: "pve-sel-exporter saw a new critical BMC SEL assertion (type {{ $labels.type }}) on {{ $labels.instance }} within the last 15 min. If the host had hung, this fires once it is back. On 2026-11-07 06:25:37 UTC a PCI SERR from the BCM57416 10 G NIC (bus 05, both bond0 legs) halted nlpve04 with no kernel trace. Read the SEL: ssh root@{{ $labels.instance }} python3 /usr/local/bin/pve-sel-exporter.py --dump (records hex; --stdout for the decoded summary). Runbook: claude-gateway docs/runbooks/pve-host-exporters.md § In-band BMC SEL exporter."
+      - alert: PVESelExporterStale
+        expr: |
+          (time() - pve_sel_last_run_timestamp_seconds > 1800)
+          or pve_sel_read_ok == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: hardware
+        annotations:
+          summary: "{{ $labels.instance }} BMC SEL exporter is stale or cannot read /dev/ipmi0"
+          description: "pve-sel-exporter.timer (5 min) has not completed a SEL read for 30+ min, or reports pve_sel_read_ok 0, so PVEBMCCriticalEvent is blind on this host. Check: systemctl status pve-sel-exporter.service; journalctl -u pve-sel-exporter; ls -l /dev/ipmi0 (ipmi_devintf)."

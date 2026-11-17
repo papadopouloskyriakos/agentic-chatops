@@ -1,0 +1,26 @@
+{
+  "slug": "<project-slug>",
+  "title": "<one-line description>",
+  "youtrack_prefix": "<UPPER>",
+  "matrix_room": "!ROOMID:matrix.example.net",
+  "primary_language": "<go|typescript|python|rust|...>",
+  "test_command": "<e.g. go test ./...>",
+  "lint_command": "<e.g. go vet ./... && golangci-lint run>",
+  "ci_pipeline": ".gitlab-ci.yml",
+  "bounded_contexts": [
+    "<context-1>",
+    "<context-2>"
+  ],
+  "max_parallel_workers": 4,
+  "max_loc_per_worker": 500,
+  "owners": [
+    "operator-mxid@matrix.example.net"
+  ],
+  "risk_profile": "low|medium|high",
+  "gitlab_project_id": null,
+  "surfaces": {
+    "http_api": true,
+    "events": true,
+    "persistent_data": true
+  }
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the in-band BMC SEL exporter every 5 minutes (and 2 min after boot)
+Documentation=https://gitlab.example.net/n8n/claude-gateway/-/blob/main/scripts/pve-sel-exporter.py
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*:0/5
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

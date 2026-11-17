@@ -1,0 +1,90 @@
+{
+  "id": "B90NqTknqhInVLYP",
+  "name": "NL - Lab Stats API",
+  "active": true,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Lab Stats Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "parameters": {
+        "path": "lab-stats",
+        "responseMode": "responseNode",
+        "httpMethod": "GET",
+        "options": {}
+      },
+      "webhookId": "5f676439-02cf-4c87-ac9e-f27a46dcc500"
+    },
+    {
+      "id": "query-stats",
+      "name": "Query Lab Stats",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "python3 /app/claude-gateway/scripts/lab-stats.py"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond with JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.parse($json.stdout) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "public, max-age=300"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Lab Stats Webhook": {
+      "main": [
+        [
+          {
+            "node": "Query Lab Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Lab Stats": {
+      "main": [
+        [
+          {
+            "node": "Respond with JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

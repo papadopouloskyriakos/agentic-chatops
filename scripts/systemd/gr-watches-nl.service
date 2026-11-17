@@ -1,0 +1,23 @@
+[Unit]
+Description=GR watches NL: probe key NL services, page NLSiteDegraded via the local paging bridge (IFRNLLEI01PRD-2992)
+Documentation=https://gitlab.example.net/n8n/claude-gateway/-/blob/main/docs/runbooks/gr-watches-nl.md
+# GR system unit on grclaude01, beside paging-bridge.service (deployed COPY at
+# /home/app-user/scripts/). Not for nl-claude01: NL cannot watch itself.
+After=network-online.target paging-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=app-user
+ExecStart=/usr/bin/python3 /home/app-user/scripts/gr-watches-nl.py --once
+Environment=HOME=/home/app-user
+Environment=GRWATCH_BRIDGE_URL=http://127.0.0.1:9106
+Environment=GRWATCH_BRIDGE_ENV=/home/app-user/.config/am-twilio/env
+Environment=GRWATCH_STATE_DIR=/var/lib/gr-watches-nl
+# /var/lib/gr-watches-nl (owned by app-user): state.json, mute.json, lock
+StateDirectory=gr-watches-nl
+# worst case: every probe times out (NL dark) ~ 20 s, plus a bridge POST <= 30 s
+TimeoutStartSec=58
+Nice=5
+StandardOutput=journal
+StandardError=journal

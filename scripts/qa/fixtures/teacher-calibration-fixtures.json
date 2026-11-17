@@ -1,0 +1,194 @@
+[
+  {
+    "id": "tool-use-excellent",
+    "topic": "gulli-01-tool-use",
+    "question": "Which MCP servers does the ChatOps platform expose to the Claude Code tier, and why is Tool Use considered an A-grade pattern?",
+    "rubric": "Lists at least 5 MCP servers (netbox, n8n-mcp, youtrack, proxmox, codegraph, opentofu, etc.), mentions rich tool access at both tiers, grounds the A grade in breadth of integration.",
+    "bloom_level": "explanation",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": "docs/agentic-patterns-audit.md", "section": "Tool Use", "verbatim_text": "| 1 | **Tool Use** | 9 MCP servers (netbox, n8n-mcp, youtrack, proxmox, codegraph, opentofu, tfmcp, kubernetes, gitlab-mcp). Both tiers have rich tool access. | A |"}
+    ],
+    "answer": "The platform exposes 9 MCP servers — netbox, n8n-mcp, youtrack, proxmox, codegraph, opentofu, tfmcp, kubernetes, and gitlab-mcp. Tool Use is rated A because both tiers (OpenClaw Tier 1 and Claude Code Tier 2) have rich access to this full toolset, so every decision can be grounded in live infrastructure data rather than guessed.",
+    "expected_band": "excellent",
+    "stub_score": 0.92,
+    "stub_bloom": "explanation",
+    "stub_confidence": 0.95
+  },
+  {
+    "id": "multi-agent-excellent",
+    "topic": "gulli-02-multi-agent-collaboration",
+    "question": "Describe the three-tier agentic architecture and what prevents a Tier 1 agent from bypassing Tier 3 approval for a destructive action.",
+    "rubric": "Identifies OpenClaw T1 / Claude Code T2 / Human T3, explains the escalation protocol with approval gates, references the agent_as_tool validator + .claude/agents/*.md tool allowlists.",
+    "bloom_level": "analysis",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": "docs/agentic-patterns-audit.md", "section": "Multi-Agent Collaboration", "verbatim_text": "| 2 | **Multi-Agent Collaboration** | 3-tier architecture (OpenClaw T1 → Claude Code T2 → Human T3). Clear role separation, escalation protocol. | A |"}
+    ],
+    "answer": "Three tiers: OpenClaw handles Tier 1 triage (fast, read-only pattern matching), Claude Code is Tier 2 (evidence-based diagnosis with tool access), and the human operator is Tier 3 (irreversible approvals). Destructive actions can't bypass T3 because the runner's Build Prompt enforces [POLL] / [AUTO-RESOLVE] gates, the matrix-bridge only auto-resolves low-risk classifications, and the agent definitions have read-only tool allowlists so a T1 agent literally cannot call Edit/Write without going through escalation.",
+    "expected_band": "excellent",
+    "stub_score": 0.88,
+    "stub_bloom": "analysis",
+    "stub_confidence": 0.9
+  },
+  {
+    "id": "poll-good-partial-rubric",
+    "topic": "gulli-04-human-in-the-loop",
+    "question": "How does a [POLL] block reach the operator and what event type does the bridge emit?",
+    "rubric": "Mentions the Runner's parsePoll() detecting [POLL], the MSC3381 poll.start event, and that the bridge resumes the session with the chosen plan.",
+    "bloom_level": "explanation",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "Interactive Poll Plan Selection", "verbatim_text": "Event type: org.matrix.msc3381.poll.start (unstable prefix required). Bridge caches polls in staticData.pollCache, detects org.matrix.msc3381.poll.response events. On vote: Bridge resumes session with structured context."}
+    ],
+    "answer": "The runner's parse function detects the [POLL] block in Claude's output and posts a Matrix poll using MSC3381 (unstable event type org.matrix.msc3381.poll.start). When the operator votes the bridge catches the response and resumes the session.",
+    "expected_band": "good",
+    "stub_score": 0.75,
+    "stub_bloom": "explanation",
+    "stub_confidence": 0.85
+  },
+  {
+    "id": "rag-good-missing-detail",
+    "topic": "rag-system",
+    "question": "What does RRF stand for in the RAG pipeline and why does the platform use 5 signals?",
+    "rubric": "RRF = Reciprocal Rank Fusion. Five signals: semantic, keyword, wiki, transcript, chaos_baselines. Weighting 0.3 for transcripts + 0.25 for chaos_baselines. Multi-signal reduces single-source bias.",
+    "bloom_level": "explanation",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "MemPalace Integration", "verbatim_text": "RAG upgraded to 5-signal RRF (semantic + keyword + wiki + 0.3*transcript + 0.25*chaos_baselines)."}
+    ],
+    "answer": "RRF is Reciprocal Rank Fusion. The platform combines five retrieval signals: semantic similarity, keyword match, wiki articles, session transcripts, and chaos baselines. Using multiple signals avoids over-reliance on any single index.",
+    "expected_band": "good",
+    "stub_score": 0.7,
+    "stub_bloom": "explanation",
+    "stub_confidence": 0.8
+  },
+  {
+    "id": "confidence-good-list-form",
+    "topic": "confidence-scoring",
+    "question": "What threshold triggers Claude Code to STOP and wait for a human, and how is the value enforced?",
+    "rubric": "< 0.5 confidence = STOP. Parse Response extracts via regex; if the gate fails twice, posts with VALIDATION INCOMPLETE badge.",
+    "bloom_level": "application",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "Confidence Scoring", "verbatim_text": "Claude Code (Tier 2) < 0.5 → STOP, wait for human. Runner validation: Parse Response extracts score, retries if missing. 2 retries with escalating feedback."}
+    ],
+    "answer": "Confidence < 0.5 means STOP. The Runner's Parse Response node extracts the CONFIDENCE: X score with a regex, retries twice if it's missing, and flags the session as VALIDATION INCOMPLETE otherwise.",
+    "expected_band": "good",
+    "stub_score": 0.78,
+    "stub_bloom": "application",
+    "stub_confidence": 0.9
+  },
+  {
+    "id": "breakers-partial-one-signal",
+    "topic": "rag-circuit-breakers",
+    "question": "Name the 4 RAG circuit breakers and the Prometheus alert that fires when any stays OPEN.",
+    "rubric": "Four names: rag_rerank_crossencoder, rag_embed_ollama, rag_synth_haiku, rag_synth_ollama. Alert: CircuitBreakerOpen (fires after ≥10 min OPEN).",
+    "bloom_level": "recall",
+    "question_type": "recognition",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "RAG circuit breakers", "verbatim_text": "4 named breakers guard the RAG external-call path — rag_rerank_crossencoder, rag_embed_ollama, rag_synth_haiku, rag_synth_ollama. CircuitBreakerOpen alert fires if any stays OPEN ≥10 min."}
+    ],
+    "answer": "The breakers include rerank and synth breakers, and there's an alert for any open breaker.",
+    "expected_band": "partial",
+    "stub_score": 0.45,
+    "stub_bloom": "recall",
+    "stub_confidence": 0.7
+  },
+  {
+    "id": "asa-partial-hand-wave",
+    "topic": "asa-iac",
+    "question": "Why does the ASA IaC auto-sync normalize running-config FROM the device back into git every 30 minutes?",
+    "rubric": "ASA drops default values and reorders commands; `show run` is the only truth; hand-written IaC diverges unless auto-normalized. Prevents human MRs from landing ahead of a device change.",
+    "bloom_level": "analysis",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "Cisco IaC device-is-truth", "verbatim_text": "Auto-sync every 30min normalizes show run from device into git. Change live first, don't open human MRs ahead of the device change. ASA suppresses default values."}
+    ],
+    "answer": "Because the device might drift from what's in git.",
+    "expected_band": "partial",
+    "stub_score": 0.42,
+    "stub_bloom": "recognition",
+    "stub_confidence": 0.6
+  },
+  {
+    "id": "tool-use-wrong",
+    "topic": "gulli-01-tool-use",
+    "question": "How many MCP servers does the ChatOps platform expose?",
+    "rubric": "Nine.",
+    "bloom_level": "recall",
+    "question_type": "recognition",
+    "source_snippets": [
+      {"source_path": "docs/agentic-patterns-audit.md", "section": "Tool Use", "verbatim_text": "9 MCP servers (netbox, n8n-mcp, youtrack, proxmox, codegraph, opentofu, tfmcp, kubernetes, gitlab-mcp)."}
+    ],
+    "answer": "Three.",
+    "expected_band": "wrong",
+    "stub_score": 0.25,
+    "stub_bloom": "recall",
+    "stub_confidence": 0.95
+  },
+  {
+    "id": "bgp-wrong-confident",
+    "topic": "bgp-routing",
+    "question": "What BGP local-preference tier does Freedom VTI use?",
+    "rubric": "LP 200 (highest). xs4all VTI=150, FRR transit=100.",
+    "bloom_level": "recall",
+    "question_type": "recognition",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "VTI Architecture", "verbatim_text": "Three-tier LP failover: Freedom VTI direct 200, xs4all VTI direct 150, FRR RR reflected 100."}
+    ],
+    "answer": "Freedom VTI uses LP 50 because it's the backup.",
+    "expected_band": "wrong",
+    "stub_score": 0.2,
+    "stub_bloom": "recall",
+    "stub_confidence": 0.9
+  },
+  {
+    "id": "offtopic-irrelevant",
+    "topic": "gulli-01-tool-use",
+    "question": "Name the MCP servers this platform exposes.",
+    "rubric": "Nine MCP servers — netbox, n8n-mcp, etc.",
+    "bloom_level": "recall",
+    "question_type": "recognition",
+    "source_snippets": [
+      {"source_path": "docs/agentic-patterns-audit.md", "section": "Tool Use", "verbatim_text": "9 MCP servers (netbox, n8n-mcp, youtrack, proxmox, codegraph, opentofu, tfmcp, kubernetes, gitlab-mcp)."}
+    ],
+    "answer": "I prefer to talk about football.",
+    "expected_band": "irrelevant",
+    "stub_score": 0.05,
+    "stub_bloom": "recall",
+    "stub_confidence": 0.98
+  },
+  {
+    "id": "restatement-irrelevant",
+    "topic": "confidence-scoring",
+    "question": "What threshold triggers Claude Code to STOP and wait for a human?",
+    "rubric": "Confidence < 0.5.",
+    "bloom_level": "recall",
+    "question_type": "recognition",
+    "source_snippets": [
+      {"source_path": "CLAUDE.md", "section": "Confidence Scoring", "verbatim_text": "Claude Code (Tier 2) < 0.5 → STOP, wait for human."}
+    ],
+    "answer": "The threshold that triggers Claude Code to stop and wait for a human is the threshold for stopping and waiting.",
+    "expected_band": "irrelevant",
+    "stub_score": 0.12,
+    "stub_bloom": "recall",
+    "stub_confidence": 0.9
+  },
+  {
+    "id": "teacher-agent-excellent",
+    "topic": "teacher-agent",
+    "question": "Why does the teacher-agent's tool allowlist exclude Edit/Write/MultiEdit?",
+    "rubric": "Read-only by design — teaches ABOUT the system without mutating it. Invariant #1 (HITL gate on mutating actions). All state changes go through teacher-agent.py writes to learning_* tables only; never touches operational tables.",
+    "bloom_level": "analysis",
+    "question_type": "explanation",
+    "source_snippets": [
+      {"source_path": ".claude/agents/teacher-agent.md", "section": "Teacher Agent", "verbatim_text": "Read-only tool allowlist [Read, Grep, Glob, Bash, ToolSearch]. Mutating tools (Edit/Write/MultiEdit) explicitly excluded. Hallucination gate + privacy invariant spelled out."}
+    ],
+    "answer": "The teacher is deliberately read-only. Its job is to teach the operator about the system, not to change it, and that maps to Invariant #1 (HITL gate on mutating actions). If the teacher could Edit or Write, a quiz-generation hallucination could drift real operational files. State changes only happen via teacher-agent.py writing to learning_* tables, which are scoped exclusively to the teaching loop.",
+    "expected_band": "excellent",
+    "stub_score": 0.9,
+    "stub_bloom": "analysis",
+    "stub_confidence": 0.95
+  }
+]

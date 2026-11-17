@@ -1,0 +1,12 @@
+[Unit]
+Description=GR watches NL every minute (IFRNLLEI01PRD-2992)
+Documentation=https://gitlab.example.net/n8n/claude-gateway/-/blob/main/docs/runbooks/gr-watches-nl.md
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=false
+Unit=gr-watches-nl.service
+
+[Install]
+WantedBy=timers.target
