@@ -1,0 +1,73 @@
+{
+  "name": "NL - Teacher Runner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "teacher-command",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Teacher Command Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "736cd8f4-adb2-47d8-ab30-da00420634d1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise incoming payload from matrix-bridge.\n// body: {operator_mxid, source_room_id, command, arg, session_id}\n\nconst body = $input.first().json.body || $input.first().json;\nconst op   = (body.operator_mxid || '').trim();\nconst room = (body.source_room_id || '').trim();\nconst cmd  = (body.command || '').trim().toLowerCase();\nconst arg  = String(body.arg || '').trim();\nconst sid  = Number(body.session_id || 0);\n\nfunction qesc(s) { return String(s).replace(/'/g, \"'\\\\''\"); }\n\nlet flags;\nswitch (cmd) {\n  case 'learn':\n    if (arg === 'pause')       flags = '--pause';\n    else if (arg === 'resume') flags = '--resume';\n    else if (arg === 'public on')  flags = '--public-on';\n    else if (arg === 'public off') flags = '--public-off';\n    else if (arg)              flags = \"--lesson --topic '\" + qesc(arg) + \"'\";\n    else                       flags = '--next';\n    break;\n  case 'quiz':\n    flags = arg ? (\"--quiz --topic '\" + qesc(arg) + \"'\") : '--quiz';\n    break;\n  case 'grade':\n    flags = \"--grade --session-id \" + sid + \" --answer '\" + qesc(arg) + \"'\";\n    break;\n  case 'progress':\n    flags = (arg === 'public') ? '--progress --public' : '--progress';\n    break;\n  case 'digest':\n  case 'class-digest':\n  case 'leaderboard':\n    flags = '--class-digest';\n    break;\n  case 'skip':\n  case 'teach':\n  case 'next':\n  default:\n    flags = '--next';\n}\n\nlet argv = flags;\nif (op)   argv += \" --operator '\" + qesc(op) + \"'\";\nif (room) argv += \" --source-room '\" + qesc(room) + \"'\";\n\nreturn [{ json: { operator_mxid: op, source_room_id: room, command: cmd, argv } }];"
+      },
+      "id": "parse-1",
+      "name": "Parse Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "command",
+        "command": "=cd /app/claude-gateway && python3 scripts/teacher-agent.py {{ $json.argv }} 2>&1",
+        "authentication": "privateKey"
+      },
+      "id": "ssh-1",
+      "name": "Invoke teacher-agent.py",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [700, 300],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "REDACTED_SSH_CRED",
+          "name": "nl-claude01 - SSH app-user"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass-through — the SSH node already ran; teacher-agent.py already posted\n// its own Matrix messages. We relay the JSON status so n8n execution logs\n// show failures cleanly in the UI.\nconst stdout = $input.first().json.stdout || '';\nlet parsed;\ntry { parsed = JSON.parse(stdout); } catch (_e) { parsed = { ok: false, raw: stdout }; }\nreturn [{ json: parsed }];"
+      },
+      "id": "parse-2",
+      "name": "Parse Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Teacher Command Webhook": {
+      "main": [[{"node": "Parse Command", "type": "main", "index": 0}]]
+    },
+    "Parse Command": {
+      "main": [[{"node": "Invoke teacher-agent.py", "type": "main", "index": 0}]]
+    },
+    "Invoke teacher-agent.py": {
+      "main": [[{"node": "Parse Output", "type": "main", "index": 0}]]
+    }
+  },
+  "active": true,
+  "settings": {"executionOrder": "v1"},
+  "id": "bGnU1YRaDMA21pna",
+  "tags": []
+}

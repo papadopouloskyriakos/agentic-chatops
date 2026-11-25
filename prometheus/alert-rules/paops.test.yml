@@ -1,0 +1,470 @@
+rule_files:
+- paops.yml
+tests:
+- name: healthy current metrics stay quiet
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 90m
+    alertname: PaopsTwilioRegistrationDown
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsFritzRegistrationDown
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsAsteriskUnhealthy
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsHostDown
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsMetricsStale
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsPostcallJobsFailed
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsPostcallBacklog
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: PaopsContactsSyncStale
+    exp_alerts: []
+- name: TwilioRegistrationDown
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 0+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 11m
+    alertname: PaopsTwilioRegistrationDown
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+        line: twilio
+      exp_annotations:
+        summary: 'Proxenos: the Twilio line is not registered'
+        description: 'The business SIP line is down. Check ''pjsip show registrations'' in proxenos-asterisk, its network path and the
+          saved line credentials. Run ops/voice-line.sh status on the assistant host.'
+- name: FritzRegistrationDown
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 0+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 11m
+    alertname: PaopsFritzRegistrationDown
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        category: paops
+        instance: nlpaops01
+        line: trunk
+      exp_annotations:
+        summary: 'Proxenos: the primary phone trunk is not registered'
+        description: The configured primary trunk is expected but not registered. Check the upstream phone gateway and 'pjsip show registrations'
+          in proxenos-asterisk.
+- name: AsteriskUnhealthy
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 0+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: PaopsAsteriskUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: Asterisk is unhealthy'
+        description: The proxenos-asterisk health check fails. Check 'docker logs proxenos-asterisk' and ops/voice-line.sh status.
+- name: HostDown
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: PaopsHostDown
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: the assistant host is unreachable'
+        description: The assistant host node exporter is unreachable; inspect the host and its network path.
+- name: PostcallJobsFailed
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 2+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 16m
+    alertname: PaopsPostcallJobsFailed
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: 2 post-call job(s) failed'
+        description: A post-call delivery exhausted its retries. Inspect proxenos-worker and /srv/proxenos/recordings/jobs/failed; review
+          the workflow before retrying.
+- name: PostcallBacklog
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 5+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 31m
+    alertname: PaopsPostcallBacklog
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: post-call jobs are accumulating (5 pending)'
+        description: The worker is not draining post-call jobs. Check proxenos-worker, workflow polling and speech/model provider reachability.
+- name: ContactsSyncStale
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 16m
+    alertname: PaopsContactsSyncStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: contacts synchronization is missing or stale'
+        description: The contact sync failed, is older than an hour, or no longer exports its status. Check proxenos-contacts and its
+          /textfile mount before trusting cached caller identities.
+- name: trunk intentionally disabled
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 0+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: PaopsFritzRegistrationDown
+    exp_alerts: []
+- name: PaopsMetricsStale old timestamp
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: PaopsMetricsStale
+    exp_alerts: []
+  - eval_time: 31m
+    alertname: PaopsMetricsStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: host metrics are missing or stale'
+        description: No current host metrics have arrived. Check proxenos-metrics.timer and the node exporter collector. Missing renamed
+          series must not silently disable line alerts.
+- name: PaopsContactsSyncStale old timestamp
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+0x100
+  alert_rule_test:
+  - eval_time: 75m
+    alertname: PaopsContactsSyncStale
+    exp_alerts: []
+  - eval_time: 76m
+    alertname: PaopsContactsSyncStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: contacts synchronization is missing or stale'
+        description: The contact sync failed, is older than an hour, or no longer exports its status. Check proxenos-contacts and its
+          /textfile mount before trusting cached caller identities.
+- name: PaopsMetricsStale absent series
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_ok{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 9m
+    alertname: PaopsMetricsStale
+    exp_alerts: []
+  - eval_time: 11m
+    alertname: PaopsMetricsStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: host metrics are missing or stale'
+        description: No current host metrics have arrived. Check proxenos-metrics.timer and the node exporter collector. Missing renamed
+          series must not silently disable line alerts.
+- name: PaopsContactsSyncStale absent series
+  interval: 1m
+  input_series:
+  - series: proxenos_registration{instance="nlpaops01",line="twilio"}
+    values: 1+0x100
+  - series: proxenos_registration{instance="nlpaops01",line="trunk"}
+    values: 1+0x100
+  - series: proxenos_trunk_expected{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_asterisk_healthy{instance="nlpaops01"}
+    values: 1+0x100
+  - series: up{instance="nlpaops01"}
+    values: 1+0x100
+  - series: proxenos_metrics_last_run_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  - series: proxenos_jobs_failed{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_jobs_pending{instance="nlpaops01"}
+    values: 0+0x100
+  - series: proxenos_contacts_last_sync_timestamp_seconds{instance="nlpaops01"}
+    values: 0+60x100
+  alert_rule_test:
+  - eval_time: 14m
+    alertname: PaopsContactsSyncStale
+    exp_alerts: []
+  - eval_time: 16m
+    alertname: PaopsContactsSyncStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        category: paops
+        instance: nlpaops01
+      exp_annotations:
+        summary: 'Proxenos: contacts synchronization is missing or stale'
+        description: The contact sync failed, is older than an hour, or no longer exports its status. Check proxenos-contacts and its
+          /textfile mount before trusting cached caller identities.

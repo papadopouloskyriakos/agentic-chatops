@@ -1,0 +1,71 @@
+openapi: 3.1.0
+info:
+  title: <project-slug> API
+  version: 0.1.0
+  description: |
+    Sync API contracts for <project-slug>. Workers generate code FROM this contract;
+    they don't invent endpoints.
+
+servers:
+  - url: http://localhost:8080
+    description: local dev
+  - url: https://api.example.net
+    description: production
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user (example)
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+            examples:
+              valid:
+                value:
+                  email: alice@example.net
+                  password_hash: "$argon2id$v=19$m=65536,t=3,p=4$..."
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrors'
+
+components:
+  schemas:
+    UserRegistration:
+      type: object
+      required: [email, password_hash]
+      properties:
+        email: {type: string, format: email}
+        password_hash: {type: string, minLength: 64}
+    User:
+      type: object
+      required: [id, email, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        created_at: {type: string, format: date-time}
+    ValidationErrors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: {type: string}
+              message: {type: string}
